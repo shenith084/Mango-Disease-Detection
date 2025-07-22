@@ -1,155 +1,143 @@
-import React, { useState, useEffect } from 'react'
-import axios from 'axios'
+// frontend/src/App.jsx
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import 'bootstrap/dist/css/bootstrap.min.css';
+import './App.css';
+
+// Import components (adjusted paths — assuming they're all in src/)
+import LandingPage from './LandingPage';
+import LoginPage from './LoginPage';
+import RegisterPage from './RegisterPage';
+import HomePage from './HomePage';
+import PredictionPage from './PredictionPage';
+import ChatbotPage from './ChatbotPage';
+import AboutPage from './AboutPage';
+import Navbar from './Navbar';
 
 function App() {
-  const [users, setUsers] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [formData, setFormData] = useState({ name: '', email: '' })
-  const [editingUser, setEditingUser] = useState(null)
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // Fetch users on component mount
   useEffect(() => {
-    fetchUsers()
-  }, [])
-
-  const fetchUsers = async () => {
-    try {
-      setLoading(true)
-      const response = await axios.get(`${API_BASE_URL}/users`)
-      setUsers(response.data.users)
-      setError('')
-    } catch (err) {
-      setError('Failed to fetch users: ' + (err.response?.data?.error || err.message))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    
-    if (!formData.name || !formData.email) {
-      setError('Both name and email are required')
-      return
-    }
-
-    try {
-      if (editingUser) {
-        // Update existing user
-        await axios.put(`${API_BASE_URL}/users/${editingUser.id}`, formData)
-        setEditingUser(null)
-      } else {
-        // Create new user
-        await axios.post(`${API_BASE_URL}/users`, formData)
+    const checkAuth = async () => {
+      try {
+        const response = await fetch('http://localhost:5000/api/check-auth', {
+          credentials: 'include',
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setUser(data.user);
+        }
+      } catch (error) {
+        console.error('Auth check error:', error);
+      } finally {
+        setLoading(false);
       }
-      
-      setFormData({ name: '', email: '' })
-      fetchUsers()
-      setError('')
-    } catch (err) {
-      setError('Failed to save user: ' + (err.response?.data?.error || err.message))
-    }
-  }
+    };
 
-  const handleEdit = (user) => {
-    setEditingUser(user)
-    setFormData({ name: user.name, email: user.email })
-  }
+    checkAuth();
+  }, []);
 
-  const handleDelete = async (userId) => {
-    if (!confirm('Are you sure you want to delete this user?')) return
+  const handleLogin = (userData) => {
+    setUser(userData);
+  };
 
+  const handleLogout = async () => {
     try {
-      await axios.delete(`${API_BASE_URL}/users/${userId}`)
-      fetchUsers()
-      setError('')
-    } catch (err) {
-      setError('Failed to delete user: ' + (err.response?.data?.error || err.message))
+      await fetch('http://localhost:5000/api/logout', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      setUser(null);
+    } catch (error) {
+      console.error('Logout error:', error);
     }
-  }
+  };
 
-  const handleCancel = () => {
-    setEditingUser(null)
-    setFormData({ name: '', email: '' })
+  if (loading) {
+    return (
+      <div className="d-flex justify-content-center align-items-center vh-100">
+        <div className="spinner-border text-warning" role="status">
+          <span className="visually-hidden">Loading...</span>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="container">
-      <h1>Flask + React + Vite App</h1>
-      
-      {error && <div className="error">{error}</div>}
-
-      {/* User Form */}
-      <form onSubmit={handleSubmit} className="user-form">
-        <h2>{editingUser ? 'Edit User' : 'Add New User'}</h2>
-        
-        <div className="form-group">
-          <label htmlFor="name">Name:</label>
-          <input
-            type="text"
-            id="name"
-            value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            placeholder="Enter name"
+    <Router>
+      <div className="App">
+        <Routes>
+          <Route path="/" element={<LandingPage />} />
+          <Route
+            path="/login"
+            element={
+              user ? <Navigate to="/home" /> : <LoginPage onLogin={handleLogin} />
+            }
           />
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="email">Email:</label>
-          <input
-            type="email"
-            id="email"
-            value={formData.email}
-            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-            placeholder="Enter email"
+          <Route
+            path="/register"
+            element={
+              user ? <Navigate to="/home" /> : <RegisterPage onLogin={handleLogin} />
+            }
           />
-        </div>
-
-        <button type="submit">
-          {editingUser ? 'Update User' : 'Add User'}
-        </button>
-        
-        {editingUser && (
-          <button type="button" onClick={handleCancel}>
-            Cancel
-          </button>
-        )}
-      </form>
-
-      {/* Users List */}
-      <div>
-        <h2>Users ({users.length})</h2>
-        
-        {loading ? (
-          <div className="loading">Loading users...</div>
-        ) : users.length === 0 ? (
-          <p>No users found. Add some users above!</p>
-        ) : (
-          users.map(user => (
-            <div key={user.id} className="user-card">
-              <h3>{user.name}</h3>
-              <p>Email: {user.email}</p>
-              <p>ID: {user.id}</p>
-              <button onClick={() => handleEdit(user)}>
-                Edit
-              </button>
-              <button 
-                className="danger" 
-                onClick={() => handleDelete(user.id)}
-              >
-                Delete
-              </button>
-            </div>
-          ))
-        )}
+          <Route
+            path="/home"
+            element={
+              user ? (
+                <>
+                  <Navbar user={user} onLogout={handleLogout} />
+                  <HomePage />
+                </>
+              ) : (
+                <Navigate to="/login" />
+              )
+            }
+          />
+          <Route
+            path="/prediction"
+            element={
+              user ? (
+                <>
+                  <Navbar user={user} onLogout={handleLogout} />
+                  <PredictionPage />
+                </>
+              ) : (
+                <Navigate to="/login" />
+              )
+            }
+          />
+          <Route
+            path="/chatbot"
+            element={
+              user ? (
+                <>
+                  <Navbar user={user} onLogout={handleLogout} />
+                  <ChatbotPage />
+                </>
+              ) : (
+                <Navigate to="/login" />
+              )
+            }
+          />
+          <Route
+            path="/about"
+            element={
+              user ? (
+                <>
+                  <Navbar user={user} onLogout={handleLogout} />
+                  <AboutPage />
+                </>
+              ) : (
+                <Navigate to="/login" />
+              )
+            }
+          />
+        </Routes>
       </div>
-
-      <button onClick={fetchUsers}>Refresh Users</button>
-    </div>
-  )
+    </Router>
+  );
 }
 
-export default App
+export default App;

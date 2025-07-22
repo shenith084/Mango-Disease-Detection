@@ -1,0 +1,138 @@
+.about-page {
+  background: #f8f9fa;
+  min-height: 100vh;
+}
+
+.container {
+  padding: 40px 15px;
+}
+
+.about-hero {
+  background: white;
+  border-radius: 15px;
+  padding: 60px 40px;
+  margin-bottom: 60px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+}
+
+.about-title {
+  color: #1a4d3a;
+  font-size: 3rem;
+  font-weight: 700;
+  margin-bottom: 20px;
+}
+
+.about-subtitle {
+  color: #ffc107;
+  font-size: 1.3rem;
+  font-weight: 600;
+  margin-bottom: 25px;
+}
+
+.about-description {
+  color: #6c757d;
+  font-size: 1.1rem;
+  line-height: 1.7;
+  margin-bottom: 0;
+}
+
+.hero-image {
+  text-align: center;
+}
+
+.hero-image img {
+  max-height: 400px;
+  object-fit: cover;
+  border-radius: 15px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+}
+
+.section-title {
+  color: #1a4d3a;
+  font-size: 2.5rem;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.section-subtitle {
+  color: #6c757d;
+  font-size: 1.1rem;
+  text-align: center;
+  margin-bottom: 50px;
+}
+
+.mission-section {
+  margin-bottom: 80px;
+}
+
+.mission-card {
+  background: white;
+  border-radius: 15px;
+  padding: 40px 30px;
+  text-align: center;
+  height: 100%;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.mission-card:hover {
+  transform: translateY(-10px);
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.15);
+}
+
+.mission-icon {
+  color: #ffc107;
+  font-size: 3rem;
+  margin-bottom: 20px;
+}
+
+.mission-card h4 {
+  color: #1a4d3a;
+  font-weight: 600;
+  margin-bottom: 15px;
+}
+
+.mission-card p {
+  color: #6c757d;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.features-section {
+  margin-bottom: 80px;
+}
+
+.feature-card {
+  background: white;
+  border-radius: 15px;
+  padding: 30px 25px;
+  height: 100%;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+  border: 2px solid transparent;
+}
+
+.feature-card:hover {
+  border-color: #ffc107;
+  transform: translateY(-5px);
+  box-shadow: 0 10px 25px rgba(255, 193, 7, 0.2);
+}
+
+.feature-icon {
+  color: #ffc107;
+  font-size: 2.5rem;
+  margin-bottom: 20px;
+}
+
+.feature-card h5 {
+  color: #1a4d3a;
+  font-weight: 600;
+  margin-bottom: 15px;
+}
+
+.feature-card p {
+  color: #6c757d;
+  line-height: 1.5;
+  margin: 0;
+}
