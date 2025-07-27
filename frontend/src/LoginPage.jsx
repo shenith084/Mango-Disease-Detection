@@ -49,125 +49,108 @@ function LoginPage({ onLogin }) {
   };
 
   const handleGoogleLogin = () => {
-    // Implement Google OAuth login
     console.log('Google login clicked');
   };
 
   const handleFacebookLogin = () => {
-    // Implement Facebook OAuth login
     console.log('Facebook login clicked');
   };
 
   return (
-    <div className="login-page">
-      <div className="container-fluid">
-        <div className="row min-vh-100">
-          {/* Left side - Form */}
-          <div className="col-lg-6 d-flex align-items-center">
-            <div className="login-form-container">
-              <div className="brand-header mb-4">
-                <Link to="/" className="brand-link">
-                  <div className="logo-circle me-2">
-                    <span className="logo-text">M</span>
-                  </div>
-                  <span className="brand-text">MANGLO</span>
+    <div className="manglo-login-page">
+      <div className="manglo-background-overlay"></div>
+      <div className="manglo-login-container">
+        <div className="manglo-form-wrapper">
+          
+          {/* Brand Header */}
+          <div className="manglo-brand-section">
+            <Link to="/" className="manglo-brand-link">
+              <div className="manglo-logo-circle">
+                <span className="manglo-logo-text">M</span>
+              </div>
+              <span className="manglo-brand-text">MANGLO</span>
+            </Link>
+          </div>
+
+          {/* Form Content */}
+          <div className="manglo-form-content">
+            <h1 className="manglo-form-title">Log in to your account</h1>
+            <p className="manglo-form-subtitle">Welcome back! Please enter your details</p>
+
+            {error && (
+              <div className="manglo-error-alert">
+                {error}
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="manglo-login-form">
+              <div className="manglo-input-group">
+                <input
+                  type="email"
+                  name="email"
+                  placeholder="E-mail"
+                  value={formData.email}
+                  onChange={handleChange}
+                  className="manglo-input-field"
+                  required
+                />
+              </div>
+
+              <div className="manglo-input-group">
+                <input
+                  type="password"
+                  name="password"
+                  placeholder="Password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  className="manglo-input-field"
+                  required
+                />
+              </div>
+
+              <div className="manglo-forgot-section">
+                <Link to="/forgot-password" className="manglo-forgot-link">
+                  Forget Password?
                 </Link>
               </div>
 
-              <div className="login-form">
-                <h2 className="form-title">Log in to your account</h2>
-                <p className="form-subtitle">Welcome back! Please enter your details</p>
+              <button
+                type="submit"
+                className="manglo-login-btn"
+                disabled={loading}
+              >
+                {loading && <span className="manglo-spinner"></span>}
+                Login
+              </button>
+            </form>
 
-                {error && (
-                  <div className="alert alert-danger" role="alert">
-                    {error}
-                  </div>
-                )}
-
-                <form onSubmit={handleSubmit}>
-                  <div className="mb-3">
-                    <input
-                      type="email"
-                      className="form-control"
-                      name="email"
-                      placeholder="E-mail"
-                      value={formData.email}
-                      onChange={handleChange}
-                      required
-                    />
-                  </div>
-
-                  <div className="mb-3">
-                    <input
-                      type="password"
-                      className="form-control"
-                      name="password"
-                      placeholder="Password"
-                      value={formData.password}
-                      onChange={handleChange}
-                      required
-                    />
-                  </div>
-
-                  <div className="mb-3">
-                    <Link to="/forgot-password" className="forgot-password-link">
-                      Forget Password?
-                    </Link>
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="btn btn-primary w-100 mb-3"
-                    disabled={loading}
-                  >
-                    {loading ? (
-                      <span className="spinner-border spinner-border-sm me-2" />
-                    ) : null}
-                    Login
-                  </button>
-                </form>
-
-                <div className="divider">
-                  <span>or Continue with</span>
-                </div>
-
-                <div className="social-login">
-                  <button
-                    type="button"
-                    className="btn btn-outline-secondary me-2"
-                    onClick={handleGoogleLogin}
-                  >
-                    <i className="fab fa-google me-2"></i>
-                    Google
-                  </button>
-
-                  <button
-                    type="button"
-                    className="btn btn-outline-secondary"
-                    onClick={handleFacebookLogin}
-                  >
-                    <i className="fab fa-facebook-f me-2"></i>
-                    Facebook
-                  </button>
-                </div>
-
-                <div className="signup-link">
-                  <span>Don't have an account? </span>
-                  <Link to="/register">Create account</Link>
-                </div>
-              </div>
+            <div className="manglo-divider">
+              <span>Or Continue with</span>
             </div>
-          </div>
 
-          {/* Right side - Image */}
-          <div className="col-lg-6 d-none d-lg-block">
-            <div className="login-image">
-              <div className="image-overlay"></div>
-              <img
-                src="/api/placeholder/600/800"
-                alt="Fresh mango in hands"
-                className="img-fluid h-100 w-100 object-cover"
-              />
+            <div className="manglo-social-buttons">
+              <button
+                type="button"
+                className="manglo-social-btn manglo-google-btn"
+                onClick={handleGoogleLogin}
+              >
+                <span className="manglo-social-icon">G</span>
+                Google
+              </button>
+
+              <button
+                type="button"
+                className="manglo-social-btn manglo-facebook-btn"
+                onClick={handleFacebookLogin}
+              >
+                <span className="manglo-social-icon">f</span>
+                Facebook
+              </button>
+            </div>
+
+            <div className="manglo-signup-section">
+              <span>Don't have an account? </span>
+              <Link to="/register" className="manglo-signup-link">Create account</Link>
             </div>
           </div>
         </div>
