@@ -19,63 +19,31 @@ function RegisterPage({ onLogin }) {
     });
   };
 
+ 
+
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
+  e.preventDefault(); // 🔴 VERY IMPORTANT to prevent default form behavior
 
-    // Validate password match
-    if (formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match');
-      setLoading(false);
-      return;
-    }
+  try {
+    const response = await fetch('http://localhost:5000/api/register', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json', // ✅ This tells Flask to expect JSON
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        email: formData.email,
+        password: formData.password
+      })
+    });
 
-    try {
-      const response = await fetch('http://localhost:5000/api/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          email: formData.email,
-          password: formData.password
-        })
-      });
+    const data = await response.json();
+    console.log(data);
+  } catch (error) {
+    console.error('Error:', error);
+  }
+};
 
-      const data = await response.json();
-
-      if (response.ok) {
-        // Auto-login after successful registration
-        const loginResponse = await fetch('http://localhost:5000/api/login', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include',
-          body: JSON.stringify({
-            email: formData.email,
-            password: formData.password
-          })
-        });
-
-        if (loginResponse.ok) {
-          const loginData = await loginResponse.json();
-          onLogin(loginData.user);
-          navigate('/home');
-        } else {
-          navigate('/login');
-        }
-      } else {
-        setError(data.error || 'Registration failed');
-      }
-    } catch (error) {
-      setError('Network error. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleGoogleSignup = () => {
     // Implement Google OAuth signup

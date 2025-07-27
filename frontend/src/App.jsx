@@ -22,6 +22,7 @@ function App() {
   useEffect(() => {
     const checkAuth = async () => {
       try {
+        
         const response = await fetch('http://localhost:5000/api/check-auth', {
           credentials: 'include',
         });
