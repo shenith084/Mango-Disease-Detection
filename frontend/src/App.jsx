@@ -5,6 +5,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './App.css';
 
+
 // Import components (adjusted paths — assuming they're all in src/)
 import LandingPage from './LandingPage';
 import LoginPage from './LoginPage';

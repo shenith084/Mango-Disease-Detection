@@ -1,0 +1,282 @@
+/* Navbar.css */
+
+/* Main navbar styling */
+.navbar {
+  background-color: #111 !important; /* Match actual dark navbar background */
+  margin-bottom: 0 !important;
+  border: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  padding: 0.25rem 0;
+  min-height: 50px;
+  z-index: 1000;
+  position: relative;
+}
+
+/* Fix spacing by preventing white line gap */
+.navbar + * {
+  margin-top: 0 !important;
+}
+
+/* Brand/Logo section */
+.navbar-brand {
+  font-weight: bold;
+  text-decoration: none !important;
+  transition: all 0.3s ease;
+}
+
+.navbar-brand:hover {
+  transform: scale(1.05);
+}
+
+/* Logo circle container */
+.logo-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(45deg, #ffc107, #ff8c00);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(255, 193, 7, 0.3);
+  transition: all 0.3s ease;
+}
+
+.navbar-brand:hover .logo-circle {
+  box-shadow: 0 4px 12px rgba(255, 193, 7, 0.5);
+  transform: rotate(5deg);
+}
+
+/* Logo text inside circle */
+.logo-text {
+  color: #000;
+  font-size: 1.2rem;
+  font-weight: bold;
+  text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.5);
+}
+
+/* Alternative: Logo image styling (if you want to use an image instead) */
+.logo-image {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #ffc107;
+  transition: all 0.3s ease;
+}
+
+.navbar-brand:hover .logo-image {
+  border-color: #ff8c00;
+  transform: rotate(5deg);
+}
+
+/* Brand text */
+.brand-text {
+  font-size: 1.3rem;
+  font-weight: bold;
+  color: #ffc107 !important;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+  letter-spacing: 1px;
+}
+
+/* Navigation links */
+.nav-link {
+  color: rgba(255, 255, 255, 0.8) !important;
+  font-weight: 500;
+  padding: 0.3rem 0.8rem !important;
+  border-radius: 5px;
+  transition: all 0.3s ease;
+  margin: 0 0.1rem;
+}
+
+.nav-link:hover {
+  color: #ffc107 !important;
+  background-color: rgba(255, 193, 7, 0.1);
+  transform: translateY(-2px);
+}
+
+/* Active link styling */
+.nav-link.active {
+  color: #ffc107 !important;
+  background-color: rgba(255, 193, 7, 0.15);
+  font-weight: bold;
+  border-bottom: 2px solid #ffc107;
+}
+
+/* User welcome text */
+.navbar-text {
+  color: rgba(255, 255, 255, 0.9) !important;
+  font-weight: 500;
+}
+
+/* Logout button */
+.btn-outline-warning {
+  border: 2px solid #ffc107;
+  color: #ffc107;
+  font-weight: 500;
+  padding: 0.2rem 0.8rem;
+  transition: all 0.3s ease;
+  font-size: 0.9rem;
+}
+
+.btn-outline-warning:hover {
+  background-color: #ffc107;
+  color: #000;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(255, 193, 7, 0.3);
+}
+
+/* Navbar toggler for mobile */
+.navbar-toggler {
+  border: none;
+  padding: 0.25rem 0.5rem;
+}
+
+.navbar-toggler:focus {
+  box-shadow: 0 0 0 0.2rem rgba(255, 193, 7, 0.25);
+}
+
+.navbar-toggler-icon {
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%28255, 193, 7, 1%29' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
+}
+
+/* Responsive adjustments */
+@media (max-width: 991.98px) {
+  .navbar-nav {
+    margin-top: 1rem;
+  }
+
+  .nav-link {
+    margin: 0.2rem 0;
+  }
+
+  .d-flex.align-items-center {
+    margin-top: 1rem;
+    flex-direction: column;
+    align-items: flex-start !important;
+  }
+
+  .navbar-text {
+    margin-bottom: 0.5rem !important;
+  }
+}
+
+@media (max-width: 576px) {
+  .brand-text {
+    font-size: 1.2rem;
+  }
+
+  .logo-circle {
+    width: 35px;
+    height: 35px;
+  }
+
+  .logo-text {
+    font-size: 1.3rem;
+  }
+}
+
+/* Custom logo variants - you can choose which one to use */
+
+/* Variant 1: Gradient background logo */
+.logo-circle.gradient {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+/* Variant 2: Solid color logo */
+.logo-circle.solid {
+  background-color: #ffc107;
+}
+
+/* Variant 3: Dark logo with light text */
+.logo-circle.dark {
+  background-color: #343a40;
+  border: 2px solid #ffc107;
+}
+
+.logo-circle.dark .logo-text {
+  color: #ffc107;
+}
+
+/* Variant 4: Transparent logo with border */
+.logo-circle.transparent {
+  background: transparent;
+  border: 3px solid #ffc107;
+}
+
+.logo-circle.transparent .logo-text {
+  color: #ffc107;
+}
+
+/* Navbar.css */
+
+.navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #000;
+  padding: 1rem 2rem;
+  height: 70px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+
+.navbar-left {
+  display: flex;
+  align-items: center;
+}
+
+.logo {
+  height: 40px;
+  margin-right: 1rem;
+}
+
+.navbar-title {
+  color: orange;
+  font-size: 1.8rem;
+  font-weight: bold;
+}
+
+.navbar-links {
+  display: flex;
+  gap: 1.5rem;
+  margin-left: 2rem;
+}
+
+.navbar-links a {
+  color: white;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 5px;
+  transition: 0.3s;
+}
+
+.navbar-links a.active,
+.navbar-links a:hover {
+  background-color: orange;
+  color: black;
+}
+
+.navbar-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.navbar-right span {
+  font-weight: bold;
+  color: #fff;
+}
+
+.navbar-right button {
+  background: transparent;
+  border: 2px solid orange;
+  color: orange;
+  padding: 6px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: 0.3s;
+}
+
+.navbar-right button:hover {
+  background-color: orange;
+  color: black;
+}
