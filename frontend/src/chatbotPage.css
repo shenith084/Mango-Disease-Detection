@@ -1,3 +1,62 @@
+/* Add these specific rules to ensure input text is visible */
+
+.chat-input {
+  border: 2px solid #e9ecef;
+  border-radius: 25px;
+  padding: 12px 20px;
+  font-size: 1rem;
+  transition: all 0.3s ease;
+  
+  /* Ensure text is visible */
+  color: #333333 !important;
+  background-color: #ffffff !important;
+  opacity: 1 !important;
+  font-family: inherit;
+  line-height: 1.4;
+  
+  /* Remove any text transformations */
+  text-transform: none;
+  letter-spacing: normal;
+  
+  /* Ensure proper text rendering */
+  -webkit-text-fill-color: #333333;
+  -webkit-appearance: none;
+}
+
+.chat-input:focus {
+  border-color: #ffc107;
+  box-shadow: 0 0 0 0.2rem rgba(255, 193, 7, 0.25);
+  color: #333333 !important;
+  background-color: #ffffff !important;
+}
+
+.chat-input::placeholder {
+  color: #6c757d !important;
+  opacity: 0.7;
+}
+
+/* Fix for webkit browsers */
+.chat-input::-webkit-input-placeholder {
+  color: #6c757d !important;
+}
+
+.chat-input::-moz-placeholder {
+  color: #6c757d !important;
+}
+
+.chat-input:-ms-input-placeholder {
+  color: #6c757d !important;
+}
+
+/* Ensure the input container doesn't have conflicting styles */
+.chat-input-form {
+  padding: 20px 25px;
+  border-top: 2px solid #f0f0f0;
+  position: relative;
+  z-index: 1;
+}
+
+/* Rest of your existing CSS remains the same */
 .chatbot-page {
   background: linear-gradient(135deg, #1a4d3a 0%, #2d5a47 100%);
   min-height: 100vh;
@@ -156,24 +215,6 @@
     opacity: 1;
     transform: translateY(0);
   }
-}
-
-.chat-input-form {
-  padding: 20px 25px;
-  border-top: 2px solid #f0f0f0;
-}
-
-.chat-input {
-  border: 2px solid #e9ecef;
-  border-radius: 25px;
-  padding: 12px 20px;
-  font-size: 1rem;
-  transition: all 0.3s ease;
-}
-
-.chat-input:focus {
-  border-color: #ffc107;
-  box-shadow: 0 0 0 0.2rem rgba(255, 193, 7, 0.25);
 }
 
 .send-button {
