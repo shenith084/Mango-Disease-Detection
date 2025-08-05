@@ -1,9 +1,16 @@
+<<<<<<< HEAD
 # Environment variables - NEVER commit these
 .env
 .env.local
 .env.production
 # .gitignore
 .env.*
+=======
+# .gitignore
+.env.*
+echo ".env" >> .gitignore
+
+>>>>>>> ea97d92c11ade91e632e22bc9e2a395017fa9d36
 
 
 # Logs

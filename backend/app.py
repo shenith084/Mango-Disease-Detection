@@ -16,6 +16,11 @@ import base64
 import requests
 import json
 import time
+<<<<<<< HEAD
+=======
+from dotenv import load_dotenv
+load_dotenv()  # Load environment variables from .env file
+>>>>>>> ea97d92c11ade91e632e22bc9e2a395017fa9d36
 
 # ✅ Initialize Flask app
 app = Flask(__name__)
@@ -68,9 +73,15 @@ except Exception as e:
     model = None
 
 # ✅ Updated Chatbot Configuration
+<<<<<<< HEAD
 OPENROUTER_API_KEY = "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"
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 CHAT_MODEL = "deepseek/deepseek-r1-0528:free"
+=======
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+OPENROUTER_API_URL = os.getenv("OPENROUTER_API_URL")
+CHAT_MODEL = os.getenv("CHAT_MODEL")
+>>>>>>> ea97d92c11ade91e632e22bc9e2a395017fa9d36
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -538,6 +549,10 @@ def get_user_conversation_history(user_id, limit=10):
     except Exception as e:
         print(f"Error fetching conversation history: {e}")
         return []
+<<<<<<< HEAD
+=======
+
+>>>>>>> ea97d92c11ade91e632e22bc9e2a395017fa9d36
 
 # ✅ Root route
 @app.route("/")
