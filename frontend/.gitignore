@@ -1,7 +1,8 @@
-# Environment variables - NEVER commit these
-.env
-.env.local
-.env.production
+# .gitignore
+.env.*
+echo ".env" >> .gitignore
+
+
 
 # Logs
 logs
