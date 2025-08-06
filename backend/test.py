@@ -1,11 +1,11 @@
-from flask import Flask, request, jsonify, session, send_file, Response, current_app, g
+from flask import Flask, request, jsonify, session, send_file, Response
 from flask_cors import CORS
 from flask_bcrypt import Bcrypt
 import mysql.connector
 from mysql.connector import Error
 from werkzeug.utils import secure_filename
 from datetime import datetime
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 import io
 import os
 import uuid
@@ -19,13 +19,8 @@ import time
 import re
 from dotenv import load_dotenv
 
-# ✅ FIXED: Set TensorFlow environment variables BEFORE importing TensorFlow
-os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Suppress all TensorFlow warnings
-tf.get_logger().setLevel('ERROR')  # Only show errors
 
 load_dotenv()  # Loads the .env file
-
 # ✅ Initialize Flask app
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-here'
@@ -71,8 +66,11 @@ try:
     if os.path.exists(model_path):
         model = tf.keras.models.load_model(model_path)
         print("✓ Model loaded successfully.")
+        print(f"✓ Model input shape: {model.input_shape}")
+        print(f"✓ Model output shape: {model.output_shape}")
     else:
-        print(f"Warning: Model file not found at {model_path}")
+        print(f"Error loading model: File not found at {model_path}")
+        print("Please update the model_path variable with correct path")
 except Exception as e:
     print(f"✗ Error loading model: {e}")
     model = None
@@ -81,43 +79,6 @@ except Exception as e:
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 OPENROUTER_API_URL = os.getenv("OPENROUTER_API_URL")
 CHAT_MODEL = os.getenv("CHAT_MODEL")
-
-# ✅ FIXED: Increase response length for comprehensive answers
-MAX_RESPONSE_TOKENS = 800  # Allow longer, more detailed responses
-
-def generate_placeholder_image(width, height, text="Placeholder"):
-    """Generate a placeholder image with given dimensions"""
-    try:
-        # Create image with light gray background
-        img = Image.new('RGB', (width, height), color='#f0f0f0')
-        draw = ImageDraw.Draw(img)
-        
-        # Try to use a font, fallback to default if not available
-        try:
-            font = ImageFont.truetype("arial.ttf", size=min(width, height) // 10)
-        except:
-            font = ImageFont.load_default()
-        
-        # Calculate text position to center it
-        bbox = draw.textbbox((0, 0), text, font=font)
-        text_width = bbox[2] - bbox[0]
-        text_height = bbox[3] - bbox[1]
-        
-        x = (width - text_width) // 2
-        y = (height - text_height) // 2
-        
-        # Draw text
-        draw.text((x, y), text, fill='#666666', font=font)
-        
-        # Draw border
-        draw.rectangle([0, 0, width-1, height-1], outline='#cccccc')
-        
-        return img
-    except Exception as e:
-        print(f"Error generating placeholder: {e}")
-        # Return minimal placeholder
-        img = Image.new('RGB', (width, height), color='#f0f0f0')
-        return img
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -131,23 +92,36 @@ def get_db_connection():
         return None
 
 def preprocess_image(image_file):
-    """Preprocess image for model prediction"""
+    """
+    Preprocess image for model prediction - Updated to match test code methodology
+    
+    Args:
+        image_file: File object or file path
+        
+    Returns:
+        numpy.ndarray: Preprocessed image array
+    """
     try:
+        # Handle both file objects and file paths
         if hasattr(image_file, 'read'):
+            # File object - convert to PIL Image
             image = Image.open(image_file)
         else:
+            # File path - use keras load_img for consistency with test code
             image = load_img(image_file, target_size=IMG_SIZE)
             img_array = img_to_array(image)
             img_array = np.expand_dims(img_array, axis=0)
-            img_array = img_array / 255.0
+            img_array = img_array / 255.0  # Normalize to [0,1]
             return img_array
         
+        # For file objects, process similarly to test code
         image = image.convert('RGB')
         image = image.resize(IMG_SIZE)
         
+        # Convert to numpy array and preprocess like test code
         img_array = img_to_array(image)
         img_array = np.expand_dims(img_array, axis=0)
-        img_array = img_array / 255.0
+        img_array = img_array / 255.0  # Normalize to [0,1]
         
         return img_array
     except Exception as e:
@@ -155,26 +129,42 @@ def preprocess_image(image_file):
         return None
 
 def predict_disease(image_file):
-    """Predict disease from image"""
+    """
+    Predict disease from image - Updated to match test code logic
+    
+    Args:
+        image_file: File object or file path
+        
+    Returns:
+        dict: Prediction results matching test code format
+    """
     if model is None:
         return {"error": "Model not loaded"}
     
     try:
+        # Preprocess image
         processed_image = preprocess_image(image_file)
         if processed_image is None:
             return {"error": "Failed to process image"}
         
+        # Make prediction
         predictions = model.predict(processed_image, verbose=0)
         
+        # Get prediction results - matching test code logic
         predicted_class_idx = np.argmax(predictions[0])
         predicted_class = DISEASE_CLASSES[predicted_class_idx]
         confidence = float(predictions[0][predicted_class_idx])
         
+        # Create results dictionary matching test code format
         results = {
             "predicted_class": predicted_class,
-            "disease": predicted_class,
+            "disease": predicted_class,  # Keep both for backward compatibility
             "confidence": confidence,
             "all_probabilities": {
+                DISEASE_CLASSES[i]: float(predictions[0][i]) 
+                for i in range(len(DISEASE_CLASSES))
+            },
+            "all_predictions": {  # Keep both for backward compatibility
                 DISEASE_CLASSES[i]: float(predictions[0][i]) 
                 for i in range(len(DISEASE_CLASSES))
             }
@@ -186,7 +176,9 @@ def predict_disease(image_file):
         return {"error": f"Prediction failed: {str(e)}"}
 
 def get_treatment_recommendations(disease):
-    """Get treatment recommendations based on disease"""
+    """
+    Get treatment recommendations based on disease - Updated with correct disease names
+    """
     recommendations = {
         'Alternaria': "Apply copper-based or mancozeb fungicides. Remove infected leaves and fruits. Ensure proper air circulation and avoid overhead watering.",
         'Anthracnose': "Apply copper-based fungicides or propiconazole. Remove infected fruits and maintain proper sanitation. Prune for better air circulation.",
@@ -196,19 +188,26 @@ def get_treatment_recommendations(disease):
     }
     return recommendations.get(disease, "Consult with agricultural expert for treatment advice.")
 
+# ✅ NEW: Database-driven mango knowledge function
 def search_mango_knowledge(user_message, limit=5):
-    """Search mango knowledge base for relevant information"""
+    """
+    Search mango knowledge base for relevant information
+    """
     try:
         connection = get_db_connection()
         if not connection:
             return []
         
         cursor = connection.cursor()
-        keywords = re.findall(r'\b\w+\b', user_message.lower())
-        keywords = [word for word in keywords if len(word) > 2]
         
+        # Extract keywords from user message
+        keywords = re.findall(r'\b\w+\b', user_message.lower())
+        keywords = [word for word in keywords if len(word) > 2]  # Filter short words
+        
+        # Create search query using FULLTEXT search
         search_terms = ' '.join(keywords)
         
+        # Use FULLTEXT search for better relevance
         query = """
         SELECT topic, content, category, subcategory, keywords 
         FROM mango_knowledge_base 
@@ -220,6 +219,7 @@ def search_mango_knowledge(user_message, limit=5):
         cursor.execute(query, (search_terms, search_terms, limit))
         results = cursor.fetchall()
         
+        # If no FULLTEXT results, try LIKE search
         if not results:
             like_query = """
             SELECT topic, content, category, subcategory, keywords 
@@ -233,6 +233,7 @@ def search_mango_knowledge(user_message, limit=5):
         
         connection.close()
         
+        # Format results
         knowledge_items = []
         for row in results:
             knowledge_items.append({
@@ -250,84 +251,70 @@ def search_mango_knowledge(user_message, limit=5):
         return []
 
 def get_mango_response_from_db(user_message):
-    """Generate comprehensive mango response using database knowledge"""
+    """
+    Generate comprehensive mango response using database knowledge
+    """
+    # Search knowledge base
     knowledge_items = search_mango_knowledge(user_message, limit=5)
     
     if not knowledge_items:
-        return """🥭 **Mango Farming Comprehensive Guide**
+        return """**🥭 Mango Farming Assistant**
 
-I'm here to provide detailed assistance with all aspects of mango cultivation. Here's what I can help you with:
+I'd be happy to help you with any mango-related questions! I can assist with:
 
-**🌿 Disease Management:**
-• Identification of diseases like Anthracnose, Alternaria, Black Mould Rot, Stem Rot
-• Detailed treatment protocols with specific fungicides and dosages
-• Organic and chemical control methods
-• Prevention strategies and integrated disease management
+**Disease Management:**
+• Identification and treatment of diseases like Anthracnose, Alternaria, Black Mould Rot
+• Organic and chemical treatment options
+• Prevention strategies
 
-**🌱 Cultivation Practices:**
-• Site selection and soil preparation requirements
-• Planting techniques and spacing recommendations
-• Fertilization programs and nutrient management
-• Irrigation scheduling and water management
-• Pruning techniques for optimal growth and production
+**Cultivation Practices:**
+• Site selection and planting techniques
+• Fertilization and nutrition programs
+• Irrigation and water management
+• Pruning and orchard maintenance
 
-**🐛 Pest Control:**
-• Comprehensive pest identification (fruit flies, scale insects, mealybugs)
-• Integrated pest management strategies
-• Biological control methods
-• Chemical control with proper timing and dosages
+**Pest Control:**
+• Fruit fly management
+• Scale insects and mealybug control
+• Integrated pest management
 
-**🥭 Varieties and Selection:**
-• Commercial variety recommendations for different climates
-• Grafting and propagation techniques
+**Varieties and Selection:**
+• Commercial variety recommendations
 • Climate adaptation considerations
 
-**📦 Harvest and Post-Harvest:**
-• Proper harvesting techniques and timing
-• Storage methods and shelf-life extension
-• Packaging and transportation guidelines
-• Value addition and processing options
+**Harvest and Post-Harvest:**
+• Proper harvesting techniques
+• Storage and handling methods
 
-**💡 Best Practices:**
-• Organic farming approaches
-• Sustainable orchard management
-• Market preparation and quality standards
-• Export requirements and procedures
-
-Please ask me specific questions about any of these topics, and I'll provide detailed, practical guidance with step-by-step instructions!"""
+Please ask me specific questions about mango farming, and I'll provide detailed guidance!"""
     
-    # Generate comprehensive response
-    response = f"🥭 **{knowledge_items[0]['category']} - Comprehensive Guide**\n\n"
+    # Generate response based on knowledge
+    response = f"**🥭 {knowledge_items[0]['category']} Information**\n\n"
     
-    for i, item in enumerate(knowledge_items[:3]):  # Show up to 3 detailed items
+    for item in knowledge_items:
         if item['subcategory']:
-            response += f"**{i+1}. {item['subcategory']} - {item['topic']}**\n\n"
+            response += f"**{item['subcategory']} - {item['topic']}**\n\n"
         else:
-            response += f"**{i+1}. {item['topic']}**\n\n"
+            response += f"**{item['topic']}**\n\n"
         
         response += f"{item['content']}\n\n"
         
-        if i < len(knowledge_items) - 1:
+        if len(knowledge_items) > 1:
             response += "---\n\n"
     
-    # Add actionable next steps
-    response += "\n**💡 Next Steps & Related Information:**\n"
-    response += "• Ask for specific dosages and application methods\n"
-    response += "• Request seasonal management calendars\n"
-    response += "• Inquire about organic alternatives\n"
-    response += "• Get information on integrated management approaches\n\n"
-    
-    # Add related topics
+    # Add related suggestions
     categories = list(set([item['category'] for item in knowledge_items]))
-    if len(categories) > 1:
-        response += f"**🔍 Related Topics Available:**\n{', '.join(categories[1:])}\n\n"
-    
-    response += "Feel free to ask follow-up questions for more specific guidance!"
+    if categories:
+        response += "\n**💡 Related Topics:**\n"
+        response += f"Ask me more about {', '.join(categories)} or any other mango farming topics!\n"
     
     return response
 
+# ✅ Updated Chatbot Functions
 def get_openrouter_response(messages):
-    """Get response from OpenRouter API with token limit"""
+    """
+    Get response from OpenRouter API with enhanced mango context
+    """
     try:
         headers = {
             "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -336,15 +323,33 @@ def get_openrouter_response(messages):
             "Content-Type": "application/json",
         }
         
+        # Enhanced system message with broader mango expertise
         system_message = {
             "role": "system",
-            "content": """You are a mango farming expert. Provide concise, practical advice on:
-• Disease identification and treatment
-• Pest management 
-• Cultivation practices
-• Harvest and storage
+            "content": """You are a comprehensive mango farming and agriculture expert. You specialize in ALL aspects of mango cultivation including:
 
-Keep responses under 300 words. Be specific and actionable."""
+🌱 **Complete Mango Expertise:**
+• Disease identification, treatment, and prevention (Anthracnose, Alternaria, Black Mould Rot, Stem Rot, Powdery Mildew, etc.)
+• Pest management (Fruit flies, Scale insects, Mealybugs, Thrips, Mites, etc.)
+• Soil management and nutrition programs
+• Irrigation and water management
+• Pruning and orchard management techniques
+• Variety selection and propagation
+• Harvest timing and post-harvest handling
+• Organic farming practices
+• Climate requirements and adaptation
+• Processing and value addition
+• Market preparation and export guidelines
+
+🎯 **Response Guidelines:**
+• Provide practical, actionable advice for farmers
+• Include specific product names, dosages, and application methods when relevant
+• Offer both chemical and organic treatment options
+• Consider different scales of farming (small-scale to commercial)
+• Always prioritize safety and sustainable practices
+• Be specific about timing, weather conditions, and seasonal considerations
+
+You should respond to ANY question related to mango farming, not just diseases. Always provide comprehensive, practical advice in a structured format."""
         }
         
         payload = {
@@ -352,7 +357,7 @@ Keep responses under 300 words. Be specific and actionable."""
             "messages": [system_message] + messages,
             "stream": False,
             "temperature": 0.7,
-            "max_tokens": MAX_RESPONSE_TOKENS,
+            "max_tokens": 2000,
         }
         
         response = requests.post(OPENROUTER_API_URL, headers=headers, json=payload, timeout=30)
@@ -362,7 +367,7 @@ Keep responses under 300 words. Be specific and actionable."""
             if 'choices' in result and len(result['choices']) > 0:
                 return result['choices'][0]['message']['content'].strip()
         else:
-            print(f"OpenRouter API Error: {response.status_code}")
+            print(f"OpenRouter API Error: {response.status_code} - {response.text}")
             return None
             
     except Exception as e:
@@ -370,14 +375,27 @@ Keep responses under 300 words. Be specific and actionable."""
         return None
 
 def get_chatbot_response(user_message, conversation_history=[]):
-    """Get chatbot response with fallback"""
+    """
+    Get chatbot response with OpenRouter API and database fallback
+    
+    Args:
+        user_message (str): The user's message
+        conversation_history (list): Previous conversation messages
+    
+    Returns:
+        str: Bot response
+    """
     try:
-        messages = conversation_history[-6:] + [{"role": "user", "content": user_message}]
+        # Prepare messages for API
+        messages = conversation_history + [{"role": "user", "content": user_message}]
         
+        # Try OpenRouter API first
         api_response = get_openrouter_response(messages)
         if api_response:
             return api_response
         
+        # Fallback to database-driven responses if API fails
+        print("OpenRouter API failed, using database knowledge")
         return get_mango_response_from_db(user_message)
         
     except Exception as e:
@@ -385,27 +403,36 @@ def get_chatbot_response(user_message, conversation_history=[]):
         return get_mango_response_from_db(user_message)
 
 def save_chat_message(user_id, message, response):
-    """Save chat message and response to database"""
+    """
+    FIXED: Save chat message and response to database with proper error handling
+    """
     connection = None
     try:
         connection = get_db_connection()
         if connection:
             cursor = connection.cursor()
+            
+            # Ensure we have a valid connection and table exists
             cursor.execute("SHOW TABLES LIKE 'chat_history'")
             if not cursor.fetchone():
+                print("chat_history table does not exist")
                 return False
             
+            # Insert with explicit commit
             cursor.execute(
                 """INSERT INTO chat_history (user_id, message, response, created_at) 
                    VALUES (%s, %s, %s, %s)""",
                 (user_id, message, response, datetime.now())
             )
             connection.commit()
+            print(f"✓ Chat message saved for user {user_id}")
             return True
-        return False
+        else:
+            print("✗ Database connection failed in save_chat_message")
+            return False
             
     except Exception as e:
-        print(f"Error saving chat message: {e}")
+        print(f"✗ Error saving chat message: {e}")
         if connection:
             connection.rollback()
         return False
@@ -416,14 +443,19 @@ def save_chat_message(user_id, message, response):
             except:
                 pass
 
-def get_user_conversation_history(user_id, limit=6):
-    """Get recent conversation history for context"""
+def get_user_conversation_history(user_id, limit=10):
+    """
+    FIXED: Get recent conversation history for context with better error handling
+    """
     try:
         connection = get_db_connection()
         if connection:
             cursor = connection.cursor()
+            
+            # Check if table exists first
             cursor.execute("SHOW TABLES LIKE 'chat_history'")
             if not cursor.fetchone():
+                print("chat_history table does not exist")
                 return []
             
             cursor.execute(
@@ -436,47 +468,31 @@ def get_user_conversation_history(user_id, limit=6):
             
             history = []
             rows = cursor.fetchall()
-            for row in reversed(rows):
+            for row in reversed(rows):  # Reverse to get chronological order
                 history.extend([
                     {"role": "user", "content": row[0]},
                     {"role": "assistant", "content": row[1]}
                 ])
             
             connection.close()
-            return history
+            print(f"✓ Retrieved {len(rows)} chat history items for user {user_id}")
+            return history[-20:]  # Keep last 20 messages for context
             
     except Exception as e:
-        print(f"Error fetching conversation history: {e}")
+        print(f"✗ Error fetching conversation history: {e}")
         return []
 
-# ✅ NEW: Add placeholder image route
-@app.route('/api/placeholder/<int:width>/<int:height>')
-def placeholder_image(width, height):
-    """Generate and serve placeholder images"""
-    try:
-        # Limit dimensions to prevent abuse
-        width = min(max(width, 50), 2000)
-        height = min(max(height, 50), 2000)
-        
-        # Generate placeholder image
-        img = generate_placeholder_image(width, height, f"{width}x{height}")
-        
-        # Convert to bytes
-        img_io = io.BytesIO()
-        img.save(img_io, 'PNG')
-        img_io.seek(0)
-        
-        return send_file(img_io, mimetype='image/png')
-        
-    except Exception as e:
-        print(f"Error generating placeholder image: {e}")
-        return jsonify({"error": "Failed to generate placeholder image"}), 500
-
-# ✅ Routes
+# ✅ Root route
 @app.route("/")
 def home():
     return "Mango Disease Management API is running"
 
+# ✅ Placeholder route (optional)
+@app.route("/api/users")
+def get_users():
+    return jsonify({"message": "User API placeholder"})
+
+# ✅ Check session login status
 @app.route('/api/check-auth', methods=['GET'])
 def check_auth():
     if 'user_id' in session:
@@ -484,6 +500,7 @@ def check_auth():
     else:
         return jsonify({'authenticated': False})
 
+# ✅ Register route
 @app.route('/api/register', methods=['POST'])
 def register():
     connection = None
@@ -500,15 +517,19 @@ def register():
         connection = get_db_connection()
         if connection:
             cursor = connection.cursor()
+
+            # Check if user already exists
             cursor.execute("SELECT id FROM users WHERE email = %s", (email,))
             if cursor.fetchone():
                 return jsonify({"error": "User already exists"}), 409
 
+            # Insert new user
             cursor.execute(
                 "INSERT INTO users (email, password, created_at, updated_at) VALUES (%s, %s, %s, %s)",
                 (email, hashed_password, datetime.now(), datetime.now())
             )
             connection.commit()
+
             return jsonify({"message": "User registered successfully"}), 201
         else:
             return jsonify({"error": "Database connection failed"}), 500
@@ -519,6 +540,7 @@ def register():
         if connection:
             connection.close()
 
+# ✅ Login route
 @app.route('/api/login', methods=['POST'])
 def login():
     connection = None
@@ -539,35 +561,28 @@ def login():
             if user and bcrypt.check_password_hash(user[2], password):
                 session['user_id'] = user[0]
                 session['email'] = user[1]
-                
-                print(f"✓ User logged in: {user[1]} (ID: {user[0]})")
-                
                 return jsonify({
                     "message": "Login successful",
-                    "success": True,
-                    "user": {"id": user[0], "email": user[1]},
-                    "redirect": "dashboard"
+                    "user": {"id": user[0], "email": user[1]}
                 }), 200
             else:
-                return jsonify({
-                    "error": "Invalid email or password", 
-                    "success": False
-                }), 401
+                return jsonify({"error": "Invalid credentials"}), 401
         else:
             return jsonify({"error": "Database connection failed"}), 500
 
     except Exception as e:
-        print(f"Login error: {e}")
-        return jsonify({"error": "Login failed. Please try again."}), 500
+        return jsonify({"error": str(e)}), 500
     finally:
         if connection:
             connection.close()
 
+# ✅ Logout route
 @app.route('/api/logout', methods=['POST'])
 def logout():
     session.clear()
     return jsonify({"message": "Logout successful"}), 200
 
+# ✅ Prediction route
 @app.route('/api/predict', methods=['POST'])
 def predict():
     try:
@@ -582,15 +597,18 @@ def predict():
             return jsonify({"error": "No file selected"}), 400
         
         if file and allowed_file(file.filename):
+            # Generate unique filename
             filename = str(uuid.uuid4()) + '.' + file.filename.rsplit('.', 1)[1].lower()
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(filepath)
             
+            # Predict disease using the saved file path (matching test code approach)
             prediction_result = predict_disease(filepath)
             
             if "error" in prediction_result:
                 return jsonify(prediction_result), 500
             
+            # Save prediction to database
             connection = get_db_connection()
             if connection:
                 cursor = connection.cursor()
@@ -607,7 +625,7 @@ def predict():
                 return jsonify({
                     "id": prediction_id,
                     "predicted_class": prediction_result['predicted_class'],
-                    "disease": prediction_result['predicted_class'],
+                    "disease": prediction_result['predicted_class'],  # For backward compatibility
                     "confidence": prediction_result['confidence'],
                     "all_probabilities": prediction_result['all_probabilities'],
                     "recommendations": get_treatment_recommendations(prediction_result['predicted_class'])
@@ -620,6 +638,7 @@ def predict():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# ✅ History route
 @app.route('/api/history', methods=['GET'])
 def get_history():
     try:
@@ -631,7 +650,7 @@ def get_history():
             cursor = connection.cursor()
             cursor.execute(
                 """SELECT id, predicted_disease, confidence, created_at 
-                   FROM predictions WHERE user_id = %s ORDER BY created_at DESC LIMIT 20""",
+                   FROM predictions WHERE user_id = %s ORDER BY created_at DESC""",
                 (session['user_id'],)
             )
             predictions = cursor.fetchall()
@@ -641,6 +660,7 @@ def get_history():
                 history.append({
                     "id": pred[0],
                     "disease": pred[1],
+                    "predicted_class": pred[1],  # For consistency
                     "confidence": pred[2],
                     "date": pred[3].strftime('%Y-%m-%d %H:%M:%S')
                 })
@@ -655,6 +675,7 @@ def get_history():
         if connection:
             connection.close()
 
+# ✅ Enhanced Chat route with debugging
 @app.route('/api/chat', methods=['POST'])
 def chat():
     try:
@@ -667,131 +688,30 @@ def chat():
         if not message:
             return jsonify({"error": "Message is required"}), 400
         
-        conversation_history = get_user_conversation_history(session['user_id'], limit=6)
+        print(f"🔄 Processing chat for user {session['user_id']}: {message[:50]}...")
+        
+        # Get conversation history for context
+        conversation_history = get_user_conversation_history(session['user_id'], limit=5)
+        
+        # Get response from OpenRouter API with fallback
         bot_response = get_chatbot_response(message, conversation_history)
-        save_chat_message(session['user_id'], message, bot_response)
+        
+        # Save chat history to database with debugging
+        save_success = save_chat_message(session['user_id'], message, bot_response)
+        if not save_success:
+            print("⚠️ Warning: Failed to save chat message to database")
         
         return jsonify({
             "response": bot_response,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "saved": save_success  # For debugging
         }), 200
         
     except Exception as e:
-        print(f"Chat error: {e}")
+        print(f"❌ Chat error: {e}")
         return jsonify({"error": "An error occurred while processing your message"}), 500
 
-@app.route('/api/chat/stream', methods=['POST'])
-def chat_stream():
-    """Streaming chat endpoint with context fix"""
-    try:
-        if 'user_id' not in session:
-            return jsonify({"error": "Authentication required"}), 401
-        
-        data = request.get_json()
-        messages = data.get('messages', [])
-        
-        if not messages:
-            return jsonify({"error": "Messages are required"}), 400
-        
-        current_user_id = session['user_id']
-        
-        def generate_stream():
-            try:
-                headers = {
-                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                    "HTTP-Referer": "http://localhost:5000",
-                    "X-Title": "Mango Disease Management Assistant",
-                    "Content-Type": "application/json",
-                }
-                
-                system_message = {
-                    "role": "system",
-                    "content": "You are a comprehensive mango farming expert. Provide detailed, practical advice covering disease management, pest control, cultivation, and post-harvest handling. Include specific product names, dosages, and step-by-step procedures. Aim for thorough, actionable responses."
-                }
-                
-                payload = {
-                    "model": CHAT_MODEL,
-                    "messages": [system_message] + messages[-6:],
-                    "stream": True,
-                    "temperature": 0.7,
-                    "max_tokens": MAX_RESPONSE_TOKENS,
-                }
-                
-                response = requests.post(OPENROUTER_API_URL, headers=headers, json=payload, stream=True, timeout=30)
-                
-                if not response.ok:
-                    last_message = messages[-1]['content'] if messages else ""
-                    fallback_response = get_mango_response_from_db(last_message)
-                    
-                    for char in fallback_response:
-                        yield f'data: {{"content": "{char}"}}\n\n'
-                        time.sleep(0.01)
-                    yield 'data: [DONE]\n\n'
-                    return
-                
-                full_response = ""
-                for line in response.iter_lines():
-                    if line:
-                        line = line.decode('utf-8')
-                        if line.startswith('data: '):
-                            data_part = line[6:]
-                            if data_part == '[DONE]':
-                                if full_response and messages:
-                                    user_message = messages[-1]['content']
-                                    try:
-                                        connection = get_db_connection()
-                                        if connection:
-                                            cursor = connection.cursor()
-                                            cursor.execute(
-                                                """INSERT INTO chat_history (user_id, message, response, created_at) 
-                                                   VALUES (%s, %s, %s, %s)""",
-                                                (current_user_id, user_message, full_response, datetime.now())
-                                            )
-                                            connection.commit()
-                                            connection.close()
-                                    except Exception as save_error:
-                                        print(f"Save error: {save_error}")
-                                        
-                                yield 'data: [DONE]\n\n'
-                                break
-                            
-                            try:
-                                parsed = json.loads(data_part)
-                                content = parsed.get('choices', [{}])[0].get('delta', {}).get('content', '')
-                                if content:
-                                    full_response += content
-                                    escaped_content = content.replace('"', '\\"').replace('\n', '\\n')
-                                    yield f'data: {{"content": "{escaped_content}"}}\n\n'
-                            except json.JSONDecodeError:
-                                continue
-                                
-            except Exception as e:
-                print(f"Streaming error: {e}")
-                last_message = messages[-1]['content'] if messages else ""
-                fallback_response = get_mango_response_from_db(last_message)
-                
-                for char in fallback_response:
-                    escaped_char = char.replace('"', '\\"').replace('\n', '\\n')
-                    yield f'data: {{"content": "{escaped_char}"}}\n\n'
-                    time.sleep(0.01)
-                yield 'data: [DONE]\n\n'
-        
-        response = Response(
-            generate_stream(),
-            content_type='text/plain; charset=utf-8',
-            headers={
-                'Cache-Control': 'no-cache',
-                'Connection': 'keep-alive',
-                'Access-Control-Allow-Origin': 'http://localhost:5173',
-                'Access-Control-Allow-Credentials': 'true'
-            }
-        )
-        return response
-        
-    except Exception as e:
-        print(f"Stream chat error: {e}")
-        return jsonify({"error": "Failed to process streaming request"}), 500
-
+# ✅ Get chat history route with debugging
 @app.route('/api/chat/history', methods=['GET'])
 def get_chat_history():
     try:
@@ -801,6 +721,8 @@ def get_chat_history():
         connection = get_db_connection()
         if connection:
             cursor = connection.cursor()
+            
+            # Check if table exists
             cursor.execute("SHOW TABLES LIKE 'chat_history'")
             if not cursor.fetchone():
                 return jsonify({"error": "Chat history table not found"}), 500
@@ -810,7 +732,7 @@ def get_chat_history():
                    FROM chat_history 
                    WHERE user_id = %s 
                    ORDER BY created_at DESC 
-                   LIMIT 20""",
+                   LIMIT 50""",
                 (session['user_id'],)
             )
             
@@ -823,14 +745,231 @@ def get_chat_history():
                 })
             
             connection.close()
-            return jsonify({"history": history}), 200
+            return jsonify({"history": history, "count": len(history)}), 200
         else:
             return jsonify({"error": "Database connection failed"}), 500
             
     except Exception as e:
-        print(f"Error fetching chat history: {e}")
+        print(f"❌ Error fetching chat history: {e}")
         return jsonify({"error": "Failed to fetch chat history"}), 500
 
+# ✅ Model info route
+@app.route('/api/model/info', methods=['GET'])
+def get_model_info():
+    """Get information about the loaded model"""
+    try:
+        if model is None:
+            return jsonify({
+                "model_loaded": False,
+                "error": "Model not loaded"
+            }), 500
+        
+        return jsonify({
+            "model_loaded": True,
+            "input_shape": str(model.input_shape),
+            "output_shape": str(model.output_shape),
+            "classes": DISEASE_CLASSES,
+            "num_classes": len(DISEASE_CLASSES),
+            "image_size": IMG_SIZE
+        }), 200
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# ✅ Test prediction route (without authentication)
+@app.route('/api/predict/test', methods=['POST'])
+def predict_test():
+    """Test prediction without authentication (for development)"""
+    try:
+        if 'image' not in request.files:
+            return jsonify({"error": "No image file provided"}), 400
+        
+        file = request.files['image']
+        if file.filename == '':
+            return jsonify({"error": "No file selected"}), 400
+        
+        if file and allowed_file(file.filename):
+            # Save temporarily for prediction
+            filename = str(uuid.uuid4()) + '.' + file.filename.rsplit('.', 1)[1].lower()
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(filepath)
+            
+            # Predict disease
+            prediction_result = predict_disease(filepath)
+            
+            # Clean up temporary file
+            try:
+                os.remove(filepath)
+            except:
+                pass
+            
+            if "error" in prediction_result:
+                return jsonify(prediction_result), 500
+            
+            return jsonify({
+                "predicted_class": prediction_result['predicted_class'],
+                "confidence": prediction_result['confidence'],
+                "all_probabilities": prediction_result['all_probabilities'],
+                "recommendations": get_treatment_recommendations(prediction_result['predicted_class'])
+            }), 200
+        else:
+            return jsonify({"error": "Invalid file type"}), 400
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# ✅ FIXED: Streaming chat route with proper CORS headers
+@app.route('/api/chat/stream', methods=['POST'])
+def chat_stream():
+    """
+    Streaming chat endpoint with enhanced mango knowledge
+    """
+    try:
+        if 'user_id' not in session:
+            return jsonify({"error": "Authentication required"}), 401
+        
+        data = request.get_json()
+        messages = data.get('messages', [])
+        
+        if not messages:
+            return jsonify({"error": "Messages are required"}), 400
+        
+        def generate_stream():
+            try:
+                headers = {
+                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                    "HTTP-Referer": "http://localhost:5000",
+                    "X-Title": "Mango Disease Management Assistant",
+                    "Content-Type": "application/json",
+                }
+                
+                # Enhanced system message for comprehensive mango expertise
+                system_message = {
+                    "role": "system",
+                    "content": """You are a comprehensive mango farming and agriculture expert. You specialize in ALL aspects of mango cultivation including:
+
+🌱 **Complete Mango Expertise:**
+• Disease identification, treatment, and prevention (Anthracnose, Alternaria, Black Mould Rot, Stem Rot, Powdery Mildew, etc.)
+• Pest management (Fruit flies, Scale insects, Mealybugs, Thrips, Mites, etc.)
+• Soil management and nutrition programs
+• Irrigation and water management
+• Pruning and orchard management techniques
+• Variety selection and propagation
+• Harvest timing and post-harvest handling
+• Organic farming practices
+• Climate requirements and adaptation
+• Processing and value addition
+• Market preparation and export guidelines
+
+Provide practical, actionable advice with specific product names, dosages, and application methods when relevant."""
+                }
+                
+                payload = {
+                    "model": CHAT_MODEL,
+                    "messages": [system_message] + messages,
+                    "stream": True,
+                    "temperature": 0.7,
+                    "max_tokens": 2000,
+                }
+                
+                response = requests.post(OPENROUTER_API_URL, headers=headers, json=payload, stream=True, timeout=30)
+                
+                if not response.ok:
+                    # Fallback to database response if API fails
+                    last_message = messages[-1]['content'] if messages else ""
+                    fallback_response = get_mango_response_from_db(last_message)
+                    
+                    # Format as streaming response
+                    for char in fallback_response:
+                        yield f'data: {{"content": "{char}"}}\n\n'
+                        time.sleep(0.01)  # Small delay for streaming effect
+                    yield 'data: [DONE]\n\n'
+                    return
+                
+                # Process streaming response
+                full_response = ""
+                for line in response.iter_lines():
+                    if line:
+                        line = line.decode('utf-8')
+                        if line.startswith('data: '):
+                            data_part = line[6:]  # Remove 'data: ' prefix
+                            if data_part == '[DONE]':
+                                # Save complete conversation to database
+                                if full_response and messages:
+                                    user_message = messages[-1]['content']
+                                    save_chat_message(session['user_id'], user_message, full_response)
+                                yield 'data: [DONE]\n\n'
+                                break
+                            
+                            try:
+                                parsed = json.loads(data_part)
+                                content = parsed.get('choices', [{}])[0].get('delta', {}).get('content', '')
+                                if content:
+                                    full_response += content
+                                    # Escape quotes for JSON
+                                    escaped_content = content.replace('"', '\\"').replace('\n', '\\n')
+                                    yield f'data: {{"content": "{escaped_content}"}}\n\n'
+                            except json.JSONDecodeError:
+                                continue
+                                
+            except Exception as e:
+                print(f"Streaming error: {e}")
+                # Fallback response
+                last_message = messages[-1]['content'] if messages else ""
+                fallback_response = get_mango_response_from_db(last_message)
+                
+                for char in fallback_response:
+                    escaped_char = char.replace('"', '\\"').replace('\n', '\\n')
+                    yield f'data: {{"content": "{escaped_char}"}}\n\n'
+                    time.sleep(0.01)
+                yield 'data: [DONE]\n\n'
+        
+        # FIXED: Proper CORS headers for streaming response
+        response = Response(
+            generate_stream(),
+            content_type='text/plain; charset=utf-8',
+            headers={
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+                'Access-Control-Allow-Origin': 'http://localhost:5173',
+                'Access-Control-Allow-Credentials': 'true',
+                'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+                'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
+            }
+        )
+        return response
+        
+    except Exception as e:
+        print(f"Stream chat error: {e}")
+        return jsonify({"error": "Failed to process streaming request"}), 500
+
+# ✅ Clear chat history route
+@app.route('/api/chat/clear', methods=['POST'])
+def clear_chat_history():
+    try:
+        if 'user_id' not in session:
+            return jsonify({"error": "Authentication required"}), 401
+        
+        connection = get_db_connection()
+        if connection:
+            cursor = connection.cursor()
+            cursor.execute("DELETE FROM chat_history WHERE user_id = %s", (session['user_id'],))
+            affected_rows = cursor.rowcount
+            connection.commit()
+            connection.close()
+            
+            return jsonify({
+                "message": "Chat history cleared successfully", 
+                "deleted_count": affected_rows
+            }), 200
+        else:
+            return jsonify({"error": "Database connection failed"}), 500
+            
+    except Exception as e:
+        print(f"Error clearing chat history: {e}")
+        return jsonify({"error": "Failed to clear chat history"}), 500
+
+# ✅ Get disease information route
 @app.route('/api/diseases', methods=['GET'])
 def get_disease_info():
     """Get information about all supported diseases"""
@@ -881,62 +1020,108 @@ def get_disease_info():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/predict/test', methods=['POST'])
-def predict_test():
-    """Test prediction without authentication (for development)"""
+# ✅ NEW: Knowledge base search endpoint
+@app.route('/api/knowledge/search', methods=['GET'])
+def search_knowledge():
+    """Search mango knowledge base"""
     try:
-        if 'image' not in request.files:
-            return jsonify({"error": "No image file provided"}), 400
+        query = request.args.get('q', '').strip()
+        limit = int(request.args.get('limit', 10))
         
-        file = request.files['image']
-        if file.filename == '':
-            return jsonify({"error": "No file selected"}), 400
+        if not query:
+            return jsonify({"error": "Search query is required"}), 400
         
-        if file and allowed_file(file.filename):
-            filename = str(uuid.uuid4()) + '.' + file.filename.rsplit('.', 1)[1].lower()
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            file.save(filepath)
-            
-            prediction_result = predict_disease(filepath)
-            
-            try:
-                os.remove(filepath)
-            except:
-                pass
-            
-            if "error" in prediction_result:
-                return jsonify(prediction_result), 500
-            
-            return jsonify({
-                "predicted_class": prediction_result['predicted_class'],
-                "disease": prediction_result['predicted_class'],
-                "confidence": prediction_result['confidence'],
-                "all_probabilities": prediction_result['all_probabilities'],
-                "recommendations": get_treatment_recommendations(prediction_result['predicted_class'])
-            }), 200
-        else:
-            return jsonify({"error": "Invalid file type"}), 400
-    
+        knowledge_items = search_mango_knowledge(query, limit)
+        
+        return jsonify({
+            "query": query,
+            "results": knowledge_items,
+            "count": len(knowledge_items)
+        }), 200
+        
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        print(f"Knowledge search error: {e}")
+        return jsonify({"error": "Search failed"}), 500
 
-@app.route('/api/health', methods=['GET'])
-def health_check():
-    """API health check endpoint"""
+# ✅ NEW: Get all knowledge categories
+@app.route('/api/knowledge/categories', methods=['GET'])
+def get_knowledge_categories():
+    """Get all available knowledge categories"""
     try:
         connection = get_db_connection()
-        db_status = "connected" if connection else "disconnected"
         if connection:
+            cursor = connection.cursor()
+            cursor.execute("""
+                SELECT category, subcategory, COUNT(*) as count 
+                FROM mango_knowledge_base 
+                GROUP BY category, subcategory 
+                ORDER BY category, subcategory
+            """)
+            
+            results = cursor.fetchall()
+            categories = {}
+            
+            for row in results:
+                category = row[0]
+                subcategory = row[1]
+                count = row[2]
+                
+                if category not in categories:
+                    categories[category] = {"subcategories": {}, "total": 0}
+                
+                if subcategory:
+                    categories[category]["subcategories"][subcategory] = count
+                
+                categories[category]["total"] += count
+            
+            connection.close()
+            return jsonify({"categories": categories}), 200
+        else:
+            return jsonify({"error": "Database connection failed"}), 500
+            
+    except Exception as e:
+        print(f"Categories error: {e}")
+        return jsonify({"error": "Failed to fetch categories"}), 500
+
+# ✅ Health check route with database status
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """API health check endpoint with comprehensive status"""
+    try:
+        # Check database connection
+        connection = get_db_connection()
+        db_status = "connected" if connection else "disconnected"
+        
+        # Check tables
+        tables_status = {}
+        if connection:
+            cursor = connection.cursor()
+            required_tables = ['users', 'predictions', 'chat_history', 'mango_knowledge_base']
+            
+            for table in required_tables:
+                cursor.execute(f"SHOW TABLES LIKE '{table}'")
+                tables_status[table] = "exists" if cursor.fetchone() else "missing"
+            
             connection.close()
         
+        # Check model status
         model_status = "loaded" if model is not None else "not_loaded"
         
         return jsonify({
             "status": "healthy",
             "timestamp": datetime.now().isoformat(),
             "database": db_status,
+            "tables": tables_status,
             "model": model_status,
-            "supported_diseases": DISEASE_CLASSES
+            "supported_diseases": DISEASE_CLASSES,
+            "api_endpoints": {
+                "authentication": ["/api/register", "/api/login", "/api/logout"],
+                "prediction": ["/api/predict", "/api/predict/test"],
+                "chat": ["/api/chat", "/api/chat/stream", "/api/chat/history"],
+                "knowledge": ["/api/knowledge/search", "/api/knowledge/categories"],
+                "data": ["/api/history", "/api/diseases"],
+                "system": ["/api/health", "/api/model/info"]
+            }
         }), 200
         
     except Exception as e:
@@ -946,6 +1131,16 @@ def health_check():
             "timestamp": datetime.now().isoformat()
         }), 500
 
+# ✅ Optional: placeholder image generator route
+@app.route('/api/placeholder/<int:width>/<int:height>', methods=['GET'])
+def placeholder(width, height):
+    img = Image.new('RGB', (width, height), color='gray')
+    buf = io.BytesIO()
+    img.save(buf, format='PNG')
+    buf.seek(0)
+    return send_file(buf, mimetype='image/png')
+
+# ✅ FIXED: Add OPTIONS handler for CORS preflight requests
 @app.before_request
 def handle_preflight():
     if request.method == "OPTIONS":
@@ -956,6 +1151,7 @@ def handle_preflight():
         response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
+# ✅ Error handlers
 @app.errorhandler(404)
 def not_found(error):
     return jsonify({"error": "Endpoint not found"}), 404
@@ -968,17 +1164,13 @@ def internal_error(error):
 def file_too_large(error):
     return jsonify({"error": "File too large. Maximum size is 16MB"}), 413
 
-# Suppress Flask development server warning in logs
-import logging
-log = logging.getLogger('werkzeug')
-log.setLevel(logging.ERROR)
-
+# ✅ Run the app
 if __name__ == '__main__':
     print("🥭 Starting Enhanced Mango Disease Management API...")
     print(f"✓ Model Status: {'Loaded' if model else 'Not Loaded'}")
     print(f"✓ Supported Diseases: {', '.join(DISEASE_CLASSES)}")
     print(f"✓ Chat API: OpenRouter {'Available' if OPENROUTER_API_KEY else 'Not Configured'}")
-    print(f"✓ Max Response Tokens: {MAX_RESPONSE_TOKENS}")
+    print("✓ Database-driven Knowledge Base: Enabled")
+    print("✓ Enhanced Mango Expertise: All aspects of mango farming")
     print("✓ Server starting on http://localhost:5000")
-    print("✓ Placeholder images available at /api/placeholder/<width>/<height>")
     app.run(debug=True, host='0.0.0.0', port=5000)

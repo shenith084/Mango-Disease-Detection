@@ -12,8 +12,11 @@ function ChatbotPage() {
   const [inputMessage, setInputMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(true);
+  const [streamingResponse, setStreamingResponse] = useState('');
+  const [isStreaming, setIsStreaming] = useState(false);
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
+  const abortControllerRef = useRef(null);
 
   // Improved scroll to bottom function
   const scrollToBottom = () => {
@@ -26,27 +29,25 @@ function ChatbotPage() {
     }
   };
 
-  // Auto-scroll when messages change
+  // Auto-scroll when messages change or streaming updates
   useEffect(() => {
     const timer = setTimeout(() => {
       scrollToBottom();
-    }, 100); // Small delay to ensure DOM is updated
-
+    }, 100);
     return () => clearTimeout(timer);
-  }, [messages]);
+  }, [messages, streamingResponse]);
 
-  // Force scroll when loading changes
+  // Force scroll when loading/streaming changes
   useEffect(() => {
-    if (loading) {
+    if (loading || isStreaming) {
       const timer = setTimeout(() => {
         scrollToBottom();
       }, 200);
       return () => clearTimeout(timer);
     }
-  }, [loading]);
+  }, [loading, isStreaming]);
 
   useEffect(() => {
-    // Check authentication status
     checkAuthStatus();
   }, []);
 
@@ -70,15 +71,13 @@ function ChatbotPage() {
 
     // Clean up common markdown artifacts and unwanted characters
     let cleanedText = text
-      // Remove excessive asterisks and markdown symbols
-      .replace(/\*{3,}/g, '') // Remove 3+ asterisks
-      .replace(/#{1,}\s*/g, '') // Remove hash symbols
-      .replace(/\|/g, '') // Remove pipe symbols
-      .replace(/\-{3,}/g, '') // Remove long dashes
-      .replace(/_{3,}/g, '') // Remove long underscores
-      // Clean up excessive whitespace
-      .replace(/\s{3,}/g, ' ') // Replace 3+ spaces with single space
-      .replace(/\n{3,}/g, '\n\n') // Replace 3+ newlines with double newline
+      .replace(/\*{3,}/g, '')
+      .replace(/#{1,}\s*/g, '')
+      .replace(/\|/g, '')
+      .replace(/\-{3,}/g, '')
+      .replace(/_{3,}/g, '')
+      .replace(/\s{3,}/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
       .trim();
 
     // Split by double newlines for paragraphs
@@ -98,7 +97,6 @@ function ChatbotPage() {
         );
       }
       
-      // Regular paragraph
       return (
         <div key={index} className="response-paragraph">
           {formatTextContent(paragraph)}
@@ -112,17 +110,14 @@ function ChatbotPage() {
     const lines = text.split('\n').filter(line => line.trim());
     
     return lines.map((line, index) => {
-      // Remove leading/trailing whitespace and clean up the line
       let cleanLine = line.trim()
-        .replace(/^\|+|\|+$/g, '') // Remove leading/trailing pipes
-        .replace(/\s+\|/g, '') // Remove spaces before pipes
-        .replace(/\|\s+/g, '') // Remove pipes followed by spaces
+        .replace(/^\|+|\|+$/g, '')
+        .replace(/\s+\|/g, '')
+        .replace(/\|\s+/g, '')
         .trim();
 
-      // Skip empty lines after cleaning
       if (!cleanLine) return null;
 
-      // Check for bullet points (• or -)
       if (cleanLine.startsWith('•') || cleanLine.startsWith('-')) {
         const bulletText = cleanLine.replace(/^[•-]\s*/, '').trim();
         if (!bulletText) return null;
@@ -135,7 +130,6 @@ function ChatbotPage() {
         );
       }
       
-      // Check for numbered lists
       const numberedMatch = cleanLine.match(/^(\d+)\.\s*(.+)/);
       if (numberedMatch) {
         const [, number, content] = numberedMatch;
@@ -147,7 +141,6 @@ function ChatbotPage() {
         );
       }
 
-      // Check for comparison or structured data (contains multiple sections separated by |)
       if (cleanLine.includes('|') && cleanLine.split('|').length > 2) {
         const parts = cleanLine.split('|').map(part => part.trim()).filter(part => part);
         if (parts.length > 1) {
@@ -163,21 +156,18 @@ function ChatbotPage() {
         }
       }
       
-      // Regular line - clean up any remaining markdown
       cleanLine = cleanLine
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Bold text
-        .replace(/\*(.*?)\*/g, '<em>$1</em>'); // Italic text
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>');
       
       return (
         <div key={index} className="response-line" dangerouslySetInnerHTML={{ __html: cleanLine }} />
       );
-    }).filter(item => item !== null); // Remove null items
+    }).filter(item => item !== null);
   };
 
-  const handleSendMessage = async (e) => {
-    e.preventDefault();
-    if (!inputMessage.trim()) return;
-
+  // New streaming chat function
+  const handleStreamingChat = async (userMessage) => {
     if (!isAuthenticated) {
       const errorMessage = {
         type: 'bot',
@@ -188,7 +178,134 @@ function ChatbotPage() {
       return;
     }
 
-    // Add user message
+    setIsStreaming(true);
+    setStreamingResponse('');
+    
+    // Create abort controller for this request
+    abortControllerRef.current = new AbortController();
+
+    try {
+      // Prepare messages for streaming
+      const conversationHistory = messages.map(msg => ({
+        role: msg.type === 'user' ? 'user' : 'assistant',
+        content: msg.text
+      }));
+
+      // Add current user message
+      conversationHistory.push({
+        role: 'user',
+        content: userMessage
+      });
+
+      const response = await fetch('http://localhost:5000/api/chat/stream', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ messages: conversationHistory }),
+        signal: abortControllerRef.current.signal
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let fullResponse = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            
+            if (data === '[DONE]') {
+              // Streaming finished - add complete message to history
+              if (fullResponse.trim()) {
+                const botMessage = {
+                  type: 'bot',
+                  text: fullResponse,
+                  timestamp: new Date()
+                };
+                setMessages(prev => [...prev, botMessage]);
+              }
+              setStreamingResponse('');
+              setIsStreaming(false);
+              return;
+            }
+
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.content) {
+                fullResponse += parsed.content;
+                setStreamingResponse(fullResponse);
+              }
+            } catch (e) {
+              // Skip invalid JSON
+              continue;
+            }
+          }
+        }
+      }
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        console.log('Stream aborted');
+        return;
+      }
+
+      console.error('Streaming error:', error);
+      
+      // Fallback to regular chat on error
+      try {
+        const response = await fetch('http://localhost:5000/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({ message: userMessage })
+        });
+
+        const data = await response.json();
+        
+        if (response.ok) {
+          const botMessage = {
+            type: 'bot',
+            text: data.response,
+            timestamp: new Date()
+          };
+          setMessages(prev => [...prev, botMessage]);
+        } else {
+          throw new Error(data.error || 'Chat failed');
+        }
+      } catch (fallbackError) {
+        const errorMessage = {
+          type: 'bot',
+          text: 'Sorry, I\'m having trouble connecting. Please check your internet connection and try again.',
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, errorMessage]);
+      }
+    } finally {
+      setIsStreaming(false);
+      setStreamingResponse('');
+      setLoading(false);
+    }
+  };
+
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    if (!inputMessage.trim() || loading || isStreaming) return;
+
+    // Add user message immediately
     const userMessage = {
       type: 'user',
       text: inputMessage,
@@ -200,53 +317,18 @@ function ChatbotPage() {
     setInputMessage('');
     setLoading(true);
 
-    try {
-      const response = await fetch('http://localhost:5000/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({ message: currentMessage })
-      });
+    // Use streaming chat
+    await handleStreamingChat(currentMessage);
+  };
 
-      const data = await response.json();
-      
-      if (response.ok) {
-        const botMessage = {
-          type: 'bot',
-          text: data.response,
-          timestamp: new Date()
-        };
-        setMessages(prev => [...prev, botMessage]);
-      } else {
-        let errorText = 'Sorry, I encountered an error. Please try again.';
-        
-        if (response.status === 401) {
-          errorText = 'Please log in to continue chatting.';
-          setIsAuthenticated(false);
-        } else if (data.error) {
-          errorText = data.error;
-        }
-        
-        const errorMessage = {
-          type: 'bot',
-          text: errorText,
-          timestamp: new Date()
-        };
-        setMessages(prev => [...prev, errorMessage]);
-      }
-    } catch (error) {
-      console.error('Chat error:', error);
-      const errorMessage = {
-        type: 'bot',
-        text: 'Sorry, I\'m having trouble connecting. Please check your internet connection and try again.',
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, errorMessage]);
-    } finally {
-      setLoading(false);
+  // Stop streaming function
+  const stopStreaming = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
     }
+    setIsStreaming(false);
+    setStreamingResponse('');
+    setLoading(false);
   };
 
   const quickQuestions = [
@@ -261,9 +343,8 @@ function ChatbotPage() {
   ];
 
   const handleQuickQuestion = (question) => {
-    if (!loading && isAuthenticated) {
+    if (!loading && !isStreaming && isAuthenticated) {
       setInputMessage(question);
-      // Auto-focus input after setting question
       setTimeout(() => {
         const input = document.querySelector('.chat-input');
         if (input) input.focus();
@@ -272,8 +353,10 @@ function ChatbotPage() {
   };
 
   const clearChat = async () => {
+    // Stop any ongoing streaming
+    stopStreaming();
+
     try {
-      // Call API to clear chat history
       await fetch('http://localhost:5000/api/chat/clear', {
         method: 'POST',
         credentials: 'include',
@@ -282,7 +365,6 @@ function ChatbotPage() {
       console.error('Error clearing chat history:', error);
     }
 
-    // Clear local messages
     setMessages([
       {
         type: 'bot',
@@ -312,15 +394,32 @@ function ChatbotPage() {
                         <i className="fas fa-exclamation-triangle"></i> Please log in to chat
                       </span>
                     )}
+                    {isStreaming && (
+                      <span className="text-info ms-2">
+                        <i className="fas fa-circle-notch fa-spin"></i> Thinking...
+                      </span>
+                    )}
                   </p>
                 </div>
-                <button 
-                  className="btn btn-sm btn-light clear-chat-btn"
-                  onClick={clearChat}
-                  title="Clear chat"
-                >
-                  <i className="fas fa-trash"></i>
-                </button>
+                <div className="header-actions">
+                  {isStreaming && (
+                    <button 
+                      className="btn btn-sm btn-danger me-2"
+                      onClick={stopStreaming}
+                      title="Stop response"
+                    >
+                      <i className="fas fa-stop"></i>
+                    </button>
+                  )}
+                  <button 
+                    className="btn btn-sm btn-light clear-chat-btn"
+                    onClick={clearChat}
+                    title="Clear chat"
+                    disabled={isStreaming}
+                  >
+                    <i className="fas fa-trash"></i>
+                  </button>
+                </div>
               </div>
               
               <div className="chat-messages" ref={messagesContainerRef}>
@@ -357,7 +456,29 @@ function ChatbotPage() {
                     </div>
                   ))}
                   
-                  {loading && (
+                  {/* Show streaming response */}
+                  {isStreaming && streamingResponse && (
+                    <div className="message bot-message streaming-message">
+                      <div className="message-avatar">
+                        <i className="fas fa-robot"></i>
+                      </div>
+                      <div className="message-content">
+                        <div className="message-text">
+                          <div className="formatted-response">
+                            {formatBotResponse(streamingResponse)}
+                            <span className="streaming-cursor">|</span>
+                          </div>
+                        </div>
+                        <div className="message-time">
+                          <i className="fas fa-circle-notch fa-spin me-1"></i>
+                          Typing...
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Show loading indicator when starting */}
+                  {(loading && !isStreaming) && (
                     <div className="message bot-message">
                       <div className="message-avatar">
                         <i className="fas fa-robot"></i>
@@ -385,15 +506,15 @@ function ChatbotPage() {
                     placeholder={isAuthenticated ? "Type your message here..." : "Please log in to chat..."}
                     value={inputMessage}
                     onChange={(e) => setInputMessage(e.target.value)}
-                    disabled={loading || !isAuthenticated}
+                    disabled={loading || isStreaming || !isAuthenticated}
                     autoComplete="off"
                   />
                   <button
                     type="submit"
                     className="btn btn-warning send-button"
-                    disabled={loading || !inputMessage.trim() || !isAuthenticated}
+                    disabled={loading || isStreaming || !inputMessage.trim() || !isAuthenticated}
                   >
-                    {loading ? (
+                    {loading || isStreaming ? (
                       <i className="fas fa-spinner fa-spin"></i>
                     ) : (
                       <i className="fas fa-paper-plane"></i>
@@ -418,7 +539,7 @@ function ChatbotPage() {
                       key={index}
                       className="btn btn-outline-warning quick-question-btn"
                       onClick={() => handleQuickQuestion(question)}
-                      disabled={loading || !isAuthenticated}
+                      disabled={loading || isStreaming || !isAuthenticated}
                     >
                       <i className="fas fa-arrow-right me-2"></i>
                       {question}
@@ -442,8 +563,8 @@ function ChatbotPage() {
                 <div className="info-card">
                   <i className="fas fa-clock info-icon"></i>
                   <div>
-                    <h6>24/7 Available</h6>
-                    <p>Ask questions anytime about your mango farming concerns</p>
+                    <h6>Real-time Responses</h6>
+                    <p>See answers appear as they're generated, just like ChatGPT</p>
                   </div>
                 </div>
                 <div className="info-card">

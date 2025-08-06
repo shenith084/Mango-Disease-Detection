@@ -5,7 +5,6 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './App.css';
 
-
 // Import components (adjusted paths — assuming they're all in src/)
 import LandingPage from './LandingPage';
 import LoginPage from './LoginPage';
@@ -56,6 +55,12 @@ function App() {
     }
   };
 
+  // Handle successful registration - redirect to login
+  const handleRegistrationSuccess = () => {
+    // You can add any success message or notification here
+    console.log('Registration successful! Redirecting to login...');
+  };
+
   if (loading) {
     return (
       <div className="d-flex justify-content-center align-items-center vh-100">
@@ -80,7 +85,14 @@ function App() {
           <Route
             path="/register"
             element={
-              user ? <Navigate to="/home" /> : <RegisterPage onLogin={handleLogin} />
+              user ? (
+                <Navigate to="/home" />
+              ) : (
+                <RegisterPage 
+                  onLogin={handleLogin} 
+                  onRegistrationSuccess={handleRegistrationSuccess}
+                />
+              )
             }
           />
           <Route
