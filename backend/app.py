@@ -83,7 +83,7 @@ OPENROUTER_API_URL = os.getenv("OPENROUTER_API_URL")
 CHAT_MODEL = os.getenv("CHAT_MODEL")
 
 # ✅ FIXED: Increase response length for comprehensive answers
-MAX_RESPONSE_TOKENS = 800  # Allow longer, more detailed responses
+MAX_RESPONSE_TOKENS = 2500  # Allow longer, more detailed responses
 
 def generate_placeholder_image(width, height, text="Placeholder"):
     """Generate a placeholder image with given dimensions"""

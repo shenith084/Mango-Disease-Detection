@@ -1,8 +1,19 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import './LandingPage.css';
+import logo from './assets/Landing_box_image.png';
 
 function LandingPage() {
+  const [isNavOpen, setIsNavOpen] = useState(false);
+
+  const toggleNav = () => {
+    setIsNavOpen(!isNavOpen);
+  };
+
+  const closeNav = () => {
+    setIsNavOpen(false);
+  };
+
   return (
     <div className="landing-page">
       {/* Navigation */}
@@ -14,35 +25,36 @@ function LandingPage() {
             </div>
             <span className="brand-text">MANGLO</span>
           </Link>
-          
-          <button 
-            className="navbar-toggler" 
-            type="button" 
-            data-bs-toggle="collapse" 
-            data-bs-target="#navbarNav"
+
+          <button
+            className="navbar-toggler"
+            type="button"
+            onClick={toggleNav}
+            aria-expanded={isNavOpen}
+            aria-label="Toggle navigation"
           >
             <span className="navbar-toggler-icon"></span>
           </button>
-          
-          <div className="collapse navbar-collapse" id="navbarNav">
+
+          <div className={`collapse navbar-collapse ${isNavOpen ? 'show' : ''}`} id="navbarNav">
             <ul className="navbar-nav me-auto">
               <li className="nav-item">
-                <Link className="nav-link" to="/">Home</Link>
+                <Link className="nav-link" to="/" onClick={closeNav}>Home</Link>
               </li>
               <li className="nav-item">
-                <Link className="nav-link" to="/prediction">Prediction</Link>
+                <Link className="nav-link" to="/prediction" onClick={closeNav}>Prediction</Link>
               </li>
               <li className="nav-item">
-                <Link className="nav-link" to="/chatbot">Chatbot</Link>
+                <Link className="nav-link" to="/chatbot" onClick={closeNav}>Chatbot</Link>
               </li>
               <li className="nav-item">
-                <Link className="nav-link" to="/about">About Us</Link>
+                <Link className="nav-link" to="/about" onClick={closeNav}>About Us</Link>
               </li>
             </ul>
-            
-            <div className="d-flex">
-              <Link to="/login" className="btn btn-outline-light me-2">Log In</Link>
-              <Link to="/register" className="btn btn-warning">Sign Up</Link>
+
+            <div className="d-flex flex-column flex-lg-row">
+              <Link to="/login" className="btn btn-outline-light me-lg-2 mb-2 mb-lg-0" onClick={closeNav}>Log In</Link>
+              <Link to="/register" className="btn btn-warning" onClick={closeNav}>Sign Up</Link>
             </div>
           </div>
         </div>
@@ -51,15 +63,15 @@ function LandingPage() {
       {/* Hero Section */}
       <section className="hero-section">
         <div className="container">
-          <div className="row align-items-center min-vh-100">
-            <div className="col-lg-6">
+          <div className="row align-items-center">
+            <div className="col-lg-6 mb-4 mb-lg-0">
               <h1 className="hero-title">
                 Welcome to Manglo
               </h1>
               <h2 className="hero-subtitle">
                 The Smart Way to Protect Your Mangoes.........
               </h2>
-              
+
               <ul className="hero-features">
                 <li>
                   <i className="fas fa-upload me-2"></i>
@@ -78,18 +90,18 @@ function LandingPage() {
                   Save crops, reduce pesticide use, and boost yield
                 </li>
               </ul>
-              
+
               <p className="hero-tagline">
                 <em>Protect your farm. Improve your harvest. Trust Manglo !</em>
               </p>
             </div>
-            
-            <div className="col-lg-6">
+            <div className="col-lg-1"></div>
+            <div className="col-lg-5">
               <div className="hero-image">
                 <div className="mango-display">
-                  <img 
-                    src="/api/placeholder/400/300" 
-                    alt="Fresh mangoes" 
+                  <img
+                    src={logo}
+                    alt="Fresh mangoes"
                     className="img-fluid rounded"
                   />
                 </div>
@@ -107,9 +119,9 @@ function LandingPage() {
               <h2 className="section-title">Get In Touch</h2>
             </div>
           </div>
-          
+
           <div className="row">
-            <div className="col-md-4">
+            <div className="col-md-4 mb-4 mb-md-0">
               <div className="contact-card">
                 <div className="contact-icon">
                   <i className="fas fa-map-marker-alt"></i>
@@ -118,8 +130,8 @@ function LandingPage() {
                 <p>Rajarata University of Sri Lanka, Mihintale</p>
               </div>
             </div>
-            
-            <div className="col-md-4">
+
+            <div className="col-md-4 mb-4 mb-md-0">
               <div className="contact-card">
                 <div className="contact-icon">
                   <i className="fas fa-phone"></i>
@@ -128,7 +140,7 @@ function LandingPage() {
                 <p>041-0123456</p>
               </div>
             </div>
-            
+
             <div className="col-md-4">
               <div className="contact-card">
                 <div className="contact-icon">
@@ -146,10 +158,10 @@ function LandingPage() {
       <footer className="footer">
         <div className="container">
           <div className="row">
-            <div className="col-md-6">
+            <div className="col-md-6 text-center text-md-start mb-2 mb-md-0">
               <p className="mb-0">© 2025 Manglo. All right reserved.</p>
             </div>
-            <div className="col-md-6 text-md-end">
+            <div className="col-md-6 text-center text-md-end">
               <Link to="/terms" className="footer-link me-3">Terms of use</Link>
               <Link to="/privacy" className="footer-link">Privacy Policy</Link>
             </div>

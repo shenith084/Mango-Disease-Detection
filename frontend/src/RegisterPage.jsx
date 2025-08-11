@@ -276,7 +276,7 @@ function RegisterPage({ onLogin, onRegistrationSuccess }) {
                 </div>
               ) : (
                 <img
-                  src="http://localhost:5000/api/placeholder/600/800"
+                  src=""
                   alt="Fresh mango in hands"
                   className="img-fluid h-100 w-100 object-cover"
                   onError={handleImageError}
