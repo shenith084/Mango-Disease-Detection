@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import './LandingPage.css';
 import logo from './assets/Landing_box_image.png';
+import landingBg from './assets/landing.jpg'; // Import the background image
 
 function LandingPage() {
   const [isNavOpen, setIsNavOpen] = useState(false);
@@ -12,6 +13,15 @@ function LandingPage() {
 
   const closeNav = () => {
     setIsNavOpen(false);
+  };
+
+  // Inline style for background image
+  const heroStyle = {
+    backgroundImage: `linear-gradient(rgba(26, 26, 26, 0.4), rgba(26, 26, 26, 0.6)), url(${landingBg})`,
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+    backgroundRepeat: 'no-repeat',
+    backgroundAttachment: 'fixed'
   };
 
   return (
@@ -60,8 +70,8 @@ function LandingPage() {
         </div>
       </nav>
 
-      {/* Hero Section */}
-      <section className="hero-section">
+      {/* Hero Section with inline background image */}
+      <section className="hero-section" style={heroStyle}>
         <div className="container">
           <div className="row align-items-center">
             <div className="col-lg-6 mb-4 mb-lg-0">

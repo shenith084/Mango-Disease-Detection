@@ -160,10 +160,9 @@ body {
   position: relative;
   min-height: 90vh;
   background: linear-gradient(
-      rgba(26, 26, 26, 0.025),
-      rgba(26, 26, 26, 0.1)
-    ),
-    url('assets/landing.jpg');
+      rgba(26, 26, 26, 0.4),
+      rgba(26, 26, 26, 0.6)
+    );
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;

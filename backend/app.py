@@ -4,7 +4,7 @@ from flask_bcrypt import Bcrypt
 import mysql.connector
 from mysql.connector import Error
 from werkzeug.utils import secure_filename
-from datetime import datetime
+from datetime import datetime, timedelta
 from PIL import Image, ImageDraw, ImageFont
 import io
 import os
@@ -17,27 +17,28 @@ import requests
 import json
 import time
 import re
+import random
+import threading
+from collections import deque
 from dotenv import load_dotenv
 
-# ✅ FIXED: Set TensorFlow environment variables BEFORE importing TensorFlow
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Suppress all TensorFlow warnings
-tf.get_logger().setLevel('ERROR')  # Only show errors
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  
+tf.get_logger().setLevel('ERROR')  
 
 load_dotenv()  # Loads the .env file
 
-# ✅ Initialize Flask app
+# Initialize Flask app
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-here'
 
-# ✅ FIXED: Enable CORS with specific origin and credentials support
 CORS(app, 
      supports_credentials=True, 
      origins=["http://localhost:5173"],
      allow_headers=["Content-Type", "Authorization"],
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
-# ✅ Initialize Bcrypt
+# Initialize Bcrypt
 bcrypt = Bcrypt(app)
 
 # Configuration
@@ -48,7 +49,7 @@ MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB max file size
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH
 
-# ✅ Database configuration
+# Database configuration
 DB_CONFIG = {
     'host': 'localhost',
     'database': 'manglo_db',
@@ -60,30 +61,112 @@ DB_CONFIG = {
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
-# Model configuration - Updated to match test code
+# Model configuration
 IMG_SIZE = (224, 224)
 DISEASE_CLASSES = ['Alternaria', 'Anthracnose', 'Black Mould Rot', 'Healthy', 'Stem and Rot']
 
-# Load your trained model (replace with your model path)
+# Load your trained model
 model = None
 try:
     model_path = '../Model/best_model_final.h5'
     if os.path.exists(model_path):
         model = tf.keras.models.load_model(model_path)
-        print("✓ Model loaded successfully.")
+        print("Model loaded successfully.")
     else:
         print(f"Warning: Model file not found at {model_path}")
 except Exception as e:
-    print(f"✗ Error loading model: {e}")
+    print(f"Error loading model: {e}")
     model = None
 
-# ✅ Updated Chatbot Configuration
+# Chatbot Configuration
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 OPENROUTER_API_URL = os.getenv("OPENROUTER_API_URL")
 CHAT_MODEL = os.getenv("CHAT_MODEL")
+MAX_RESPONSE_TOKENS = 2500
 
-# ✅ FIXED: Increase response length for comprehensive answers
-MAX_RESPONSE_TOKENS = 2500  # Allow longer, more detailed responses
+# Enhanced Rate Limiting System
+class RateLimitHandler:
+    def __init__(self, requests_per_minute=6, requests_per_hour=50):
+        self.requests_per_minute = requests_per_minute
+        self.requests_per_hour = requests_per_hour
+        self.minute_requests = deque()
+        self.hour_requests = deque()
+        self.lock = threading.Lock()
+        self.last_request_time = None
+        
+    def can_make_request(self):
+        """Check if we can make a request based on our rate limits"""
+        with self.lock:
+            now = datetime.now()
+            
+            # Clean old requests from minute window
+            while self.minute_requests and self.minute_requests[0] < now - timedelta(minutes=1):
+                self.minute_requests.popleft()
+            
+            # Clean old requests from hour window
+            while self.hour_requests and self.hour_requests[0] < now - timedelta(hours=1):
+                self.hour_requests.popleft()
+            
+            # Check if we can make request
+            return (len(self.minute_requests) < self.requests_per_minute and 
+                    len(self.hour_requests) < self.requests_per_hour)
+    
+    def record_request(self):
+        """Record that we made a request"""
+        with self.lock:
+            now = datetime.now()
+            self.minute_requests.append(now)
+            self.hour_requests.append(now)
+            self.last_request_time = now
+    
+    def wait_if_needed(self):
+        """Wait if we need to respect rate limits"""
+        if self.last_request_time:
+            time_since_last = (datetime.now() - self.last_request_time).total_seconds()
+            min_interval = 60 / self.requests_per_minute  # seconds between requests
+            if time_since_last < min_interval:
+                wait_time = min_interval - time_since_last
+                time.sleep(wait_time)
+
+    def get_status(self):
+        """Get current rate limiting status"""
+        with self.lock:
+            now = datetime.now()
+            
+            # Clean old requests
+            while self.minute_requests and self.minute_requests[0] < now - timedelta(minutes=1):
+                self.minute_requests.popleft()
+            while self.hour_requests and self.hour_requests[0] < now - timedelta(hours=1):
+                self.hour_requests.popleft()
+            
+            return {
+                'requests_this_minute': len(self.minute_requests),
+                'requests_this_hour': len(self.hour_requests),
+                'minute_limit': self.requests_per_minute,
+                'hour_limit': self.requests_per_hour,
+                'can_make_request': self.can_make_request(),
+                'last_request': self.last_request_time.isoformat() if self.last_request_time else None
+            }
+
+# Initialize global rate limiter with conservative settings for free tier
+rate_limiter = RateLimitHandler(requests_per_minute=6, requests_per_hour=50)
+
+def exponential_backoff(attempt, base_delay=2.0, max_delay=60.0, jitter=True):
+    """Calculate backoff delay with exponential growth and jitter"""
+    delay = min(base_delay * (2 ** attempt), max_delay)
+    if jitter:
+        delay *= (0.5 + random.random() * 0.5)  # Add ±50% jitter
+    return delay
+
+def parse_retry_after(response):
+    """Parse Retry-After header from response"""
+    retry_after = response.headers.get('Retry-After')
+    if retry_after:
+        try:
+            return float(retry_after)
+        except ValueError:
+            return 30  # Default fallback
+    return None
 
 def generate_placeholder_image(width, height, text="Placeholder"):
     """Generate a placeholder image with given dimensions"""
@@ -254,56 +337,20 @@ def get_mango_response_from_db(user_message):
     knowledge_items = search_mango_knowledge(user_message, limit=5)
     
     if not knowledge_items:
-        return """🥭 **Mango Farming Comprehensive Guide**
+        return """Mango Farming Comprehensive Guide
 
-I'm here to provide detailed assistance with all aspects of mango cultivation. Here's what I can help you with:
-
-**🌿 Disease Management:**
-• Identification of diseases like Anthracnose, Alternaria, Black Mould Rot, Stem Rot
-• Detailed treatment protocols with specific fungicides and dosages
-• Organic and chemical control methods
-• Prevention strategies and integrated disease management
-
-**🌱 Cultivation Practices:**
-• Site selection and soil preparation requirements
-• Planting techniques and spacing recommendations
-• Fertilization programs and nutrient management
-• Irrigation scheduling and water management
-• Pruning techniques for optimal growth and production
-
-**🐛 Pest Control:**
-• Comprehensive pest identification (fruit flies, scale insects, mealybugs)
-• Integrated pest management strategies
-• Biological control methods
-• Chemical control with proper timing and dosages
-
-**🥭 Varieties and Selection:**
-• Commercial variety recommendations for different climates
-• Grafting and propagation techniques
-• Climate adaptation considerations
-
-**📦 Harvest and Post-Harvest:**
-• Proper harvesting techniques and timing
-• Storage methods and shelf-life extension
-• Packaging and transportation guidelines
-• Value addition and processing options
-
-**💡 Best Practices:**
-• Organic farming approaches
-• Sustainable orchard management
-• Market preparation and quality standards
-• Export requirements and procedures
+I'm here to provide detailed assistance with all aspects of mango cultivation:
 
 Please ask me specific questions about any of these topics, and I'll provide detailed, practical guidance with step-by-step instructions!"""
     
     # Generate comprehensive response
-    response = f"🥭 **{knowledge_items[0]['category']} - Comprehensive Guide**\n\n"
+    response = f"{knowledge_items[0]['category']} - Comprehensive Guide\n\n"
     
     for i, item in enumerate(knowledge_items[:3]):  # Show up to 3 detailed items
         if item['subcategory']:
-            response += f"**{i+1}. {item['subcategory']} - {item['topic']}**\n\n"
+            response += f"{i+1}. {item['subcategory']} - {item['topic']}\n\n"
         else:
-            response += f"**{i+1}. {item['topic']}**\n\n"
+            response += f"{i+1}. {item['topic']}\n\n"
         
         response += f"{item['content']}\n\n"
         
@@ -311,7 +358,7 @@ Please ask me specific questions about any of these topics, and I'll provide det
             response += "---\n\n"
     
     # Add actionable next steps
-    response += "\n**💡 Next Steps & Related Information:**\n"
+    response += "\nNext Steps & Related Information:\n"
     response += "• Ask for specific dosages and application methods\n"
     response += "• Request seasonal management calendars\n"
     response += "• Inquire about organic alternatives\n"
@@ -320,14 +367,14 @@ Please ask me specific questions about any of these topics, and I'll provide det
     # Add related topics
     categories = list(set([item['category'] for item in knowledge_items]))
     if len(categories) > 1:
-        response += f"**🔍 Related Topics Available:**\n{', '.join(categories[1:])}\n\n"
+        response += f"Related Topics Available:\n{', '.join(categories[1:])}\n\n"
     
     response += "Feel free to ask follow-up questions for more specific guidance!"
     
     return response
 
-def get_openrouter_response(messages):
-    """Get response from OpenRouter API with token limit"""
+def get_openrouter_response(messages, max_retries=4):
+    """Enhanced OpenRouter API call with better rate limiting"""
     try:
         headers = {
             "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -338,39 +385,126 @@ def get_openrouter_response(messages):
         
         system_message = {
             "role": "system",
-            "content": """You are a mango farming expert. Provide concise, practical advice on:
-• Disease identification and treatment
-• Pest management 
-• Cultivation practices
-• Harvest and storage
-
-Keep responses under 300 words. Be specific and actionable."""
+            "content": """You are a comprehensive mango farming expert assistant. Provide detailed, practical advice on:
+            • Disease identification and treatment protocols
+            • Pest management strategies  
+            • Cultivation best practices
+            • Harvest and post-harvest handling
+            
+            Include specific product recommendations, dosages, and step-by-step procedures when applicable.
+            Keep responses informative but concise (under 400 words when possible)."""
         }
         
         payload = {
             "model": CHAT_MODEL,
-            "messages": [system_message] + messages,
+            "messages": [system_message] + messages[-6:],
             "stream": False,
             "temperature": 0.7,
             "max_tokens": MAX_RESPONSE_TOKENS,
+            "top_p": 0.9,
+            "frequency_penalty": 0.1
         }
         
-        response = requests.post(OPENROUTER_API_URL, headers=headers, json=payload, timeout=30)
+        for attempt in range(max_retries):
+            try:
+                # Check our internal rate limits
+                if not rate_limiter.can_make_request():
+                    print(f"Internal rate limit hit, waiting 5s...")
+                    time.sleep(5)
+                    continue
+                
+                # Wait between requests to be respectful
+                rate_limiter.wait_if_needed()
+                
+                print(f"OpenRouter attempt {attempt + 1}/{max_retries}")
+                
+                response = requests.post(
+                    OPENROUTER_API_URL, 
+                    headers=headers, 
+                    json=payload, 
+                    timeout=45
+                )
+                
+                # Record successful request
+                rate_limiter.record_request()
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    if 'choices' in result and len(result['choices']) > 0:
+                        content = result['choices'][0]['message']['content'].strip()
+                        print(f"OpenRouter success (attempt {attempt + 1})")
+                        return content
+                    else:
+                        print(f"OpenRouter returned empty response")
+                        return None
+                
+                elif response.status_code == 429:
+                    # Rate limited by OpenRouter
+                    retry_after = parse_retry_after(response)
+                    
+                    if retry_after:
+                        wait_time = retry_after + random.uniform(1, 3)
+                        print(f"Rate limited by OpenRouter, waiting {wait_time:.1f}s (Retry-After: {retry_after})")
+                    else:
+                        wait_time = exponential_backoff(attempt, base_delay=3.0, max_delay=60.0)
+                        print(f"Rate limited, exponential backoff: {wait_time:.1f}s")
+                    
+                    if attempt < max_retries - 1:
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        print("Max retries reached for rate limiting")
+                        return None
+                
+                elif response.status_code in [500, 502, 503, 504]:
+                    # Server errors - retry with backoff
+                    wait_time = exponential_backoff(attempt, base_delay=2.0)
+                    print(f"Server error {response.status_code}, retrying in {wait_time:.1f}s")
+                    
+                    if attempt < max_retries - 1:
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        print(f"Max retries reached for server error {response.status_code}")
+                        return None
+                
+                else:
+                    print(f"OpenRouter API error: {response.status_code}")
+                    try:
+                        error_data = response.json()
+                        print(f"Error details: {error_data}")
+                    except:
+                        print(f"Response text: {response.text[:200]}...")
+                    return None
+                    
+            except requests.exceptions.Timeout:
+                wait_time = exponential_backoff(attempt, base_delay=3.0)
+                print(f"Request timeout, retrying in {wait_time:.1f}s")
+                if attempt < max_retries - 1:
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    print("Max retries reached for timeout")
+                    return None
+                    
+            except requests.exceptions.RequestException as e:
+                wait_time = exponential_backoff(attempt, base_delay=2.0)
+                print(f"Connection error: {e}, retrying in {wait_time:.1f}s")
+                if attempt < max_retries - 1:
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    print("Max retries reached for connection error")
+                    return None
         
-        if response.status_code == 200:
-            result = response.json()
-            if 'choices' in result and len(result['choices']) > 0:
-                return result['choices'][0]['message']['content'].strip()
-        else:
-            print(f"OpenRouter API Error: {response.status_code}")
-            return None
-            
+        return None
+        
     except Exception as e:
-        print(f"Error with OpenRouter API: {e}")
+        print(f"Unexpected error in OpenRouter request: {e}")
         return None
 
 def get_chatbot_response(user_message, conversation_history=[]):
-    """Get chatbot response with fallback"""
+    """Get chatbot response with enhanced fallback"""
     try:
         messages = conversation_history[-6:] + [{"role": "user", "content": user_message}]
         
@@ -378,6 +512,7 @@ def get_chatbot_response(user_message, conversation_history=[]):
         if api_response:
             return api_response
         
+        print("Falling back to database response")
         return get_mango_response_from_db(user_message)
         
     except Exception as e:
@@ -449,7 +584,11 @@ def get_user_conversation_history(user_id, limit=6):
         print(f"Error fetching conversation history: {e}")
         return []
 
-# ✅ NEW: Add placeholder image route
+# Routes
+@app.route("/")
+def home():
+    return "Mango Disease Management API is running"
+
 @app.route('/api/placeholder/<int:width>/<int:height>')
 def placeholder_image(width, height):
     """Generate and serve placeholder images"""
@@ -471,11 +610,6 @@ def placeholder_image(width, height):
     except Exception as e:
         print(f"Error generating placeholder image: {e}")
         return jsonify({"error": "Failed to generate placeholder image"}), 500
-
-# ✅ Routes
-@app.route("/")
-def home():
-    return "Mango Disease Management API is running"
 
 @app.route('/api/check-auth', methods=['GET'])
 def check_auth():
@@ -540,7 +674,7 @@ def login():
                 session['user_id'] = user[0]
                 session['email'] = user[1]
                 
-                print(f"✓ User logged in: {user[1]} (ID: {user[0]})")
+                print(f"User logged in: {user[1]} (ID: {user[0]})")
                 
                 return jsonify({
                     "message": "Login successful",
@@ -682,7 +816,7 @@ def chat():
 
 @app.route('/api/chat/stream', methods=['POST'])
 def chat_stream():
-    """Streaming chat endpoint with context fix"""
+    """Enhanced streaming chat endpoint with better rate limiting"""
     try:
         if 'user_id' not in session:
             return jsonify({"error": "Authentication required"}), 401
@@ -695,89 +829,130 @@ def chat_stream():
         
         current_user_id = session['user_id']
         
-        def generate_stream():
-            try:
-                headers = {
-                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                    "HTTP-Referer": "http://localhost:5000",
-                    "X-Title": "Mango Disease Management Assistant",
-                    "Content-Type": "application/json",
-                }
-                
-                system_message = {
-                    "role": "system",
-                    "content": "You are a comprehensive mango farming expert. Provide detailed, practical advice covering disease management, pest control, cultivation, and post-harvest handling. Include specific product names, dosages, and step-by-step procedures. Aim for thorough, actionable responses."
-                }
-                
-                payload = {
-                    "model": CHAT_MODEL,
-                    "messages": [system_message] + messages[-6:],
-                    "stream": True,
-                    "temperature": 0.7,
-                    "max_tokens": MAX_RESPONSE_TOKENS,
-                }
-                
-                response = requests.post(OPENROUTER_API_URL, headers=headers, json=payload, stream=True, timeout=30)
-                
-                if not response.ok:
-                    last_message = messages[-1]['content'] if messages else ""
-                    fallback_response = get_mango_response_from_db(last_message)
+        def generate_enhanced_stream():
+            max_retries = 3
+            
+            for attempt in range(max_retries):
+                try:
+                    # Check rate limits before attempting
+                    if not rate_limiter.can_make_request():
+                        print(f"Rate limit protection active, using fallback...")
+                        # Use fallback response
+                        last_message = messages[-1]['content'] if messages else ""
+                        fallback_response = get_mango_response_from_db(last_message)
+                        
+                        for char in fallback_response:
+                            escaped_char = char.replace('"', '\\"').replace('\n', '\\n')
+                            yield f'data: {{"content": "{escaped_char}"}}\n\n'
+                            time.sleep(0.01)
+                        yield 'data: [DONE]\n\n'
+                        return
                     
-                    for char in fallback_response:
-                        yield f'data: {{"content": "{char}"}}\n\n'
-                        time.sleep(0.01)
-                    yield 'data: [DONE]\n\n'
-                    return
-                
-                full_response = ""
-                for line in response.iter_lines():
-                    if line:
-                        line = line.decode('utf-8')
-                        if line.startswith('data: '):
-                            data_part = line[6:]
-                            if data_part == '[DONE]':
-                                if full_response and messages:
-                                    user_message = messages[-1]['content']
+                    rate_limiter.wait_if_needed()
+                    
+                    headers = {
+                        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                        "HTTP-Referer": "http://localhost:5000",
+                        "X-Title": "Mango Disease Management Assistant", 
+                        "Content-Type": "application/json",
+                    }
+                    
+                    system_message = {
+                        "role": "system",
+                        "content": "You are a comprehensive mango farming expert. Provide detailed, practical advice covering disease management, pest control, cultivation, and post-harvest handling. Include specific product names, dosages, and step-by-step procedures. Aim for thorough, actionable responses."
+                    }
+                    
+                    payload = {
+                        "model": CHAT_MODEL,
+                        "messages": [system_message] + messages[-6:],
+                        "stream": True,
+                        "temperature": 0.7,
+                        "max_tokens": MAX_RESPONSE_TOKENS,
+                    }
+                    
+                    print(f"Streaming attempt {attempt + 1}/{max_retries}")
+                    
+                    response = requests.post(
+                        OPENROUTER_API_URL, 
+                        headers=headers, 
+                        json=payload, 
+                        stream=True, 
+                        timeout=60
+                    )
+                    
+                    rate_limiter.record_request()
+                    
+                    if response.status_code == 200:
+                        full_response = ""
+                        
+                        for line in response.iter_lines():
+                            if line:
+                                line = line.decode('utf-8')
+                                if line.startswith('data: '):
+                                    data_part = line[6:]
+                                    if data_part == '[DONE]':
+                                        # Save to database
+                                        if full_response and messages:
+                                            user_message = messages[-1]['content']
+                                            try:
+                                                save_chat_message(current_user_id, user_message, full_response)
+                                            except Exception as save_error:
+                                                print(f"Save error: {save_error}")
+                                                
+                                        yield 'data: [DONE]\n\n'
+                                        return
+                                    
                                     try:
-                                        connection = get_db_connection()
-                                        if connection:
-                                            cursor = connection.cursor()
-                                            cursor.execute(
-                                                """INSERT INTO chat_history (user_id, message, response, created_at) 
-                                                   VALUES (%s, %s, %s, %s)""",
-                                                (current_user_id, user_message, full_response, datetime.now())
-                                            )
-                                            connection.commit()
-                                            connection.close()
-                                    except Exception as save_error:
-                                        print(f"Save error: {save_error}")
-                                        
-                                yield 'data: [DONE]\n\n'
-                                break
+                                        parsed = json.loads(data_part)
+                                        content = parsed.get('choices', [{}])[0].get('delta', {}).get('content', '')
+                                        if content:
+                                            full_response += content
+                                            escaped_content = content.replace('"', '\\"').replace('\n', '\\n')
+                                            yield f'data: {{"content": "{escaped_content}"}}\n\n'
+                                    except json.JSONDecodeError:
+                                        continue
+                        return
+                    
+                    elif response.status_code == 429:
+                        wait_time = 10 + (attempt * 5)  # Progressive delay
+                        print(f"Streaming rate limited, waiting {wait_time}s (attempt {attempt + 1})")
+                        
+                        if attempt < max_retries - 1:
+                            time.sleep(wait_time)
+                            continue
+                        else:
+                            # Use fallback on final attempt
+                            break
+                    
+                    else:
+                        print(f"Streaming error: {response.status_code}")
+                        if attempt < max_retries - 1:
+                            time.sleep(3 ** attempt)  # Progressive backoff
+                            continue
+                        else:
+                            break
                             
-                            try:
-                                parsed = json.loads(data_part)
-                                content = parsed.get('choices', [{}])[0].get('delta', {}).get('content', '')
-                                if content:
-                                    full_response += content
-                                    escaped_content = content.replace('"', '\\"').replace('\n', '\\n')
-                                    yield f'data: {{"content": "{escaped_content}"}}\n\n'
-                            except json.JSONDecodeError:
-                                continue
-                                
-            except Exception as e:
-                print(f"Streaming error: {e}")
-                last_message = messages[-1]['content'] if messages else ""
-                fallback_response = get_mango_response_from_db(last_message)
-                
-                for char in fallback_response:
-                    escaped_char = char.replace('"', '\\"').replace('\n', '\\n')
-                    yield f'data: {{"content": "{escaped_char}"}}\n\n'
-                    time.sleep(0.01)
-                yield 'data: [DONE]\n\n'
+                except Exception as e:
+                    print(f"Streaming attempt {attempt + 1} failed: {e}")
+                    if attempt < max_retries - 1:
+                        time.sleep(2 ** attempt)
+                        continue
+                    else:
+                        break
+            
+            # Fallback response if all attempts failed
+            print("Using fallback response for streaming")
+            last_message = messages[-1]['content'] if messages else ""
+            fallback_response = get_mango_response_from_db(last_message)
+            
+            for char in fallback_response:
+                escaped_char = char.replace('"', '\\"').replace('\n', '\\n')
+                yield f'data: {{"content": "{escaped_char}"}}\n\n'
+                time.sleep(0.01)
+            yield 'data: [DONE]\n\n'
         
         response = Response(
-            generate_stream(),
+            generate_enhanced_stream(),
             content_type='text/plain; charset=utf-8',
             headers={
                 'Cache-Control': 'no-cache',
@@ -789,7 +964,7 @@ def chat_stream():
         return response
         
     except Exception as e:
-        print(f"Stream chat error: {e}")
+        print(f"Enhanced stream chat error: {e}")
         return jsonify({"error": "Failed to process streaming request"}), 500
 
 @app.route('/api/chat/history', methods=['GET'])
@@ -830,6 +1005,16 @@ def get_chat_history():
     except Exception as e:
         print(f"Error fetching chat history: {e}")
         return jsonify({"error": "Failed to fetch chat history"}), 500
+
+@app.route('/api/rate-limit/status', methods=['GET'])
+def rate_limit_status():
+    """Check current rate limit status"""
+    try:
+        status = rate_limiter.get_status()
+        return jsonify(status), 200
+            
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/diseases', methods=['GET'])
 def get_disease_info():
@@ -930,13 +1115,24 @@ def health_check():
             connection.close()
         
         model_status = "loaded" if model is not None else "not_loaded"
+        rate_status = rate_limiter.get_status()
         
         return jsonify({
             "status": "healthy",
             "timestamp": datetime.now().isoformat(),
             "database": db_status,
             "model": model_status,
-            "supported_diseases": DISEASE_CLASSES
+            "supported_diseases": DISEASE_CLASSES,
+            "rate_limiting": {
+                "requests_this_minute": rate_status['requests_this_minute'],
+                "requests_this_hour": rate_status['requests_this_hour'],
+                "can_make_request": rate_status['can_make_request']
+            },
+            "api_config": {
+                "openrouter_configured": bool(OPENROUTER_API_KEY),
+                "chat_model": CHAT_MODEL,
+                "max_tokens": MAX_RESPONSE_TOKENS
+            }
         }), 200
         
     except Exception as e:
@@ -978,7 +1174,11 @@ if __name__ == '__main__':
     print(f"✓ Model Status: {'Loaded' if model else 'Not Loaded'}")
     print(f"✓ Supported Diseases: {', '.join(DISEASE_CLASSES)}")
     print(f"✓ Chat API: OpenRouter {'Available' if OPENROUTER_API_KEY else 'Not Configured'}")
+    print(f"✓ Rate Limiting: {rate_limiter.requests_per_minute}/min, {rate_limiter.requests_per_hour}/hour")
     print(f"✓ Max Response Tokens: {MAX_RESPONSE_TOKENS}")
     print("✓ Server starting on http://localhost:5000")
-    print("✓ Placeholder images available at /api/placeholder/<width>/<height>")
+    print("✓ Enhanced endpoints:")
+    print("  • /api/rate-limit/status - Check rate limiting status")
+    print("  • /api/health - Comprehensive health check")
+    print("  • /api/placeholder/<width>/<height> - Generate placeholder images")
     app.run(debug=True, host='0.0.0.0', port=5000)
