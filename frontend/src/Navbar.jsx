@@ -7,8 +7,13 @@ import './Navbar.css';
 function Navbar({ user, onLogout }) {
   const location = useLocation();
   const [imgError, setImgError] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
 
   const isActive = (path) => location.pathname === path ? 'active' : '';
+  
+  const toggleNavbar = () => setIsOpen(!isOpen);
+  
+  const closeNavbar = () => setIsOpen(false);
 
   return (
     <nav className="navbar navbar-expand-lg navbar-dark bg-dark">
@@ -34,25 +39,25 @@ function Navbar({ user, onLogout }) {
         <button
           className="navbar-toggler"
           type="button"
-          data-bs-toggle="collapse"
-          data-bs-target="#navbarNav"
+          onClick={toggleNavbar}
+          aria-expanded={isOpen}
         >
           <span className="navbar-toggler-icon"></span>
         </button>
 
-        <div className="collapse navbar-collapse" id="navbarNav">
+        <div className={`collapse navbar-collapse ${isOpen ? 'show' : ''}`} id="navbarNav">
           <ul className="navbar-nav me-auto">
             <li className="nav-item">
-              <Link className={`nav-link ${isActive('/home')}`} to="/home">Home</Link>
+              <Link className={`nav-link ${isActive('/home')}`} to="/home" onClick={closeNavbar}>Home</Link>
             </li>
             <li className="nav-item">
-              <Link className={`nav-link ${isActive('/prediction')}`} to="/prediction">Prediction</Link>
+              <Link className={`nav-link ${isActive('/prediction')}`} to="/prediction" onClick={closeNavbar}>Prediction</Link>
             </li>
             <li className="nav-item">
-              <Link className={`nav-link ${isActive('/chatbot')}`} to="/chatbot">Chatbot</Link>
+              <Link className={`nav-link ${isActive('/chatbot')}`} to="/chatbot" onClick={closeNavbar}>Chatbot</Link>
             </li>
             <li className="nav-item">
-              <Link className={`nav-link ${isActive('/about')}`} to="/about">About Us</Link>
+              <Link className={`nav-link ${isActive('/about')}`} to="/about" onClick={closeNavbar}>About Us</Link>
             </li>
           </ul>
 
@@ -60,7 +65,10 @@ function Navbar({ user, onLogout }) {
             <span className="navbar-text me-3">
               Welcome, {user?.email}
             </span>
-            <button className="btn btn-outline-warning" onClick={onLogout}>
+            <button className="btn btn-outline-warning" onClick={() => {
+              closeNavbar();
+              onLogout();
+            }}>
               Logout
             </button>
           </div>

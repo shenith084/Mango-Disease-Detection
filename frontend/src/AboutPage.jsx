@@ -82,7 +82,7 @@ function AboutPage() {
             <div className="col-lg-6">
               <div className="hero-image">
                 <img
-                  src="/api/placeholder/500/400"
+                  src="/src/assets/login.jpg"
                   alt="Mango farming"
                   className="img-fluid rounded"
                 />

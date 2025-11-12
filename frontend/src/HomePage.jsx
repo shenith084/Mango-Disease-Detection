@@ -5,6 +5,7 @@ import './HomePage.css';
 function HomePage() {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showAllHistory, setShowAllHistory] = useState(false);
 
   useEffect(() => {
     fetchHistory();
@@ -25,6 +26,15 @@ function HomePage() {
       setLoading(false);
     }
   };
+
+  const scrollToHistory = () => {
+    const historySection = document.getElementById('history-section');
+    if (historySection) {
+      historySection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  const displayedHistory = showAllHistory ? history : history.slice(0, 6);
 
   return (
     <div className="home-page">
@@ -78,7 +88,7 @@ function HomePage() {
               <p>View your previous predictions and track your farm's health</p>
               <button 
                 className="btn btn-warning"
-                onClick={() => document.getElementById('history-section').scrollIntoView()}
+                onClick={scrollToHistory}
               >
                 View History
               </button>
@@ -88,35 +98,42 @@ function HomePage() {
 
         {/* Statistics */}
         <div className="row mb-5">
-          <div className="col-md-3 mb-3">
-            <div className="stat-card">
-              <div className="stat-number">{history.length}</div>
-              <div className="stat-label">Total Predictions</div>
-            </div>
-          </div>
-          <div className="col-md-3 mb-3">
-            <div className="stat-card">
-              <div className="stat-number">
-                {history.filter(h => h.disease === 'Healthy').length}
+          <div className="col-12">
+            <div className="stats-wrapper">
+              <h3 className="section-title">Your Statistics</h3>
+              <div className="stats-grid-container">
+                <div className="col-md-3 mb-3">
+                  <div className="stat-card">
+                    <div className="stat-number">{history.length}</div>
+                    <div className="stat-label">Total Predictions</div>
+                  </div>
+                </div>
+                <div className="col-md-3 mb-3">
+                  <div className="stat-card healthy">
+                    <div className="stat-number">
+                      {history.filter(h => h.disease === 'Healthy').length}
+                    </div>
+                    <div className="stat-label">Healthy Crops</div>
+                  </div>
+                </div>
+                <div className="col-md-3 mb-3">
+                  <div className="stat-card diseased">
+                    <div className="stat-number">
+                      {history.filter(h => h.disease !== 'Healthy').length}
+                    </div>
+                    <div className="stat-label">Diseases Detected</div>
+                  </div>
+                </div>
+                <div className="col-md-3 mb-3">
+                  <div className="stat-card confidence">
+                    <div className="stat-number">
+                      {history.length > 0 ? 
+                        Math.round(history.reduce((sum, h) => sum + h.confidence, 0) / history.length * 100) : 0}%
+                    </div>
+                    <div className="stat-label">Avg Confidence</div>
+                  </div>
+                </div>
               </div>
-              <div className="stat-label">Healthy Crops</div>
-            </div>
-          </div>
-          <div className="col-md-3 mb-3">
-            <div className="stat-card">
-              <div className="stat-number">
-                {history.filter(h => h.disease !== 'Healthy').length}
-              </div>
-              <div className="stat-label">Diseases Detected</div>
-            </div>
-          </div>
-          <div className="col-md-3 mb-3">
-            <div className="stat-card">
-              <div className="stat-number">
-                {history.length > 0 ? 
-                  Math.round(history.reduce((sum, h) => sum + h.confidence, 0) / history.length * 100) : 0}%
-              </div>
-              <div className="stat-label">Avg Confidence</div>
             </div>
           </div>
         </div>
@@ -143,29 +160,42 @@ function HomePage() {
                   </Link>
                 </div>
               ) : (
-                <div className="history-grid">
-                  {history.slice(0, 6).map((item, index) => (
-                    <div key={index} className="history-item">
-                      <div className="history-header">
-                        <span className={`disease-badge ${item.disease === 'Healthy' ? 'healthy' : 'diseased'}`}>
-                          {item.disease}
-                        </span>
-                        <span className="prediction-date">
-                          {new Date(item.date).toLocaleDateString()}
-                        </span>
+                <>
+                  <div className="history-grid">
+                    {displayedHistory.map((item, index) => (
+                      <div key={index} className="history-item">
+                        <div className="history-header">
+                          <span className={`disease-badge ${item.disease === 'Healthy' ? 'healthy' : 'diseased'}`}>
+                            {item.disease}
+                          </span>
+                          <span className="prediction-date">
+                            {new Date(item.date).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <div className="confidence-bar">
+                          <div 
+                            className="confidence-fill"
+                            style={{ width: `${item.confidence * 100}%` }}
+                          ></div>
+                        </div>
+                        <div className="confidence-text">
+                          Confidence: {Math.round(item.confidence * 100)}%
+                        </div>
                       </div>
-                      <div className="confidence-bar">
-                        <div 
-                          className="confidence-fill"
-                          style={{ width: `${item.confidence * 100}%` }}
-                        ></div>
-                      </div>
-                      <div className="confidence-text">
-                        Confidence: {Math.round(item.confidence * 100)}%
-                      </div>
+                    ))}
+                  </div>
+                  
+                  {history.length > 6 && (
+                    <div className="toggle-button-container">
+                      <button
+                        onClick={() => setShowAllHistory(!showAllHistory)}
+                        className="btn btn-toggle"
+                      >
+                        {showAllHistory ? 'Show Less' : `Show All (${history.length})`}
+                      </button>
                     </div>
-                  ))}
-                </div>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -199,6 +229,5 @@ function HomePage() {
     </div>
   );
 }
-
 
 export default HomePage;
